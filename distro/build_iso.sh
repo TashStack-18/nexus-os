@@ -12,11 +12,11 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(dirname "$HERE")"
 IMG="$HERE/out/microos-s6.img"
 WORK="$HERE/build/iso"
-ISO="${ISO:-$HERE/out/nexus-os-final-v2.iso}"
+ISO="${ISO:-$HERE/out/lunara-os-final.iso}"
 ELF_RISCV="$ROOT/kernel/target/riscv64gc-unknown-none-elf/release/microos"
 ELF_X86="$ROOT/kernel/target/x86_64-unknown-none/release/microos"
 PROXY="http://127.0.0.1:3142"   # apt-cacher-ng
-log() { echo "[nexus-iso] $*"; }
+log() { echo "[lunara-iso] $*"; }
 
 [ -f "$IMG" ] || { echo "missing $IMG (run build.sh 6)" >&2; exit 1; }
 
@@ -133,39 +133,39 @@ set gfxmode=1920x1080x32,1600x900x32,1366x768x32,1280x720x32,1024x768x32,auto
 set gfxpayload=keep
 terminal_output gfxterm
 
-menuentry "NEXUS OS — Live Desktop (Rust Studio, Lab & Tasks)" {
+menuentry "LUNARA OS — Live Desktop (Rust Studio, Lab & Tasks)" {
     linux /live/vmlinuz boot=live quiet video=1920x1080 console=ttyS0,115200 console=tty0
     initrd /live/initrd.img
 }
 
-menuentry "NEXUS Micro-OS — Rust Kernel (Bare-Metal x86-64, Instant Boot)" {
+menuentry "LUNARA Micro-OS — Rust Kernel (Bare-Metal x86-64, Instant Boot)" {
     multiboot2 /boot/microos_x86.elf test=shell trace=0
     boot
 }
 
-menuentry "NEXUS Micro-OS — Academic Verification Suite (TC1-TC6, 68 Checks)" {
+menuentry "LUNARA Micro-OS — Academic Verification Suite (TC1-TC6, 68 Checks)" {
     multiboot2 /boot/microos_x86.elf test=all trace=0
     boot
 }
 
-menuentry "NEXUS Micro-OS — Shortest Job First (SJF) Scheduler" {
+menuentry "LUNARA Micro-OS — Shortest Job First (SJF) Scheduler" {
     multiboot2 /boot/microos_x86.elf test=shell trace=0 policy=sjf
     boot
 }
 
-menuentry "NEXUS Micro-OS — Multi-Level Feedback Queue (MLFQ) Scheduler" {
+menuentry "LUNARA Micro-OS — Multi-Level Feedback Queue (MLFQ) Scheduler" {
     multiboot2 /boot/microos_x86.elf test=shell trace=0 policy=mlfq
     boot
 }
 
-menuentry "NEXUS OS — Live (Text Console Debug Mode)" {
+menuentry "LUNARA OS — Live (Text Console Debug Mode)" {
     linux /live/vmlinuz boot=live console=ttyS0,115200 console=tty0
     initrd /live/initrd.img
 }
 EOF
 
 log "writing hybrid bootable ISO (BIOS + UEFI)"
-grub-mkrescue -o "$ISO" "$WORK/iso" -- -volid NEXUS_OS >/dev/null 2>&1
+grub-mkrescue -o "$ISO" "$WORK/iso" -- -volid LUNARA_OS >/dev/null 2>&1
 rm -rf "$R"
 
 log "done: $ISO ($(du -h "$ISO" | cut -f1))"

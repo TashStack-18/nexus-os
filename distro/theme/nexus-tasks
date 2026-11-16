@@ -71,11 +71,11 @@ def read_meminfo():
 
 class NexusTaskManager(Gtk.Window):
     def __init__(self):
-        super().__init__(title="NEXUS Task Manager & System Monitor")
+        super().__init__(title="LUNARA System Monitor")
         self.set_default_size(1080, 720)
         self.set_position(Gtk.WindowPosition.CENTER)
-        self.set_wmclass("nexus-tasks", "Nexus-tasks")
-        self.set_role("nexus-tasks")
+        self.set_wmclass("lunara-tasks", "Lunara-tasks")
+        self.set_role("lunara-tasks")
         self.connect("delete-event", self._on_delete_event)
         self.connect("destroy", self._on_destroy)
 
@@ -124,7 +124,7 @@ class NexusTaskManager(Gtk.Window):
 
         title_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         h_title = Gtk.Label(xalign=0)
-        h_title.set_markup("<b>NEXUS Task Manager</b>")
+        h_title.set_markup("<b>LUNARA System Monitor</b>")
         h_title.get_style_context().add_class("title")
         self.h_sub = Gtk.Label(label="Reading live system metrics...", xalign=0)
         title_box.pack_start(h_title, False, False, 0)

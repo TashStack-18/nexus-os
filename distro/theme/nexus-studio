@@ -38,14 +38,14 @@ EXAMPLES = {
         "about": "Starter program demonstrating NEXUS OS greeting, architecture, hardware threads, and environment diagnostics.",
         "concepts": "Formatted I/O, std::env, architecture reflection, CPU core parallelism detection.",
         "toml": '[package]\nname = "hello_system"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n',
-        "main": """// NEXUS OS - Program 1: Hello World & System Diagnostics
+        "main": """// LUNARA OS - Program 1: Hello World & System Diagnostics
 use std::env;
 
 fn main() {
     println!("============================================================");
-    println!("       NEXUS OS - Hello World & System Diagnostics           ");
+    println!("       LUNARA OS - Hello World & System Diagnostics          ");
     println!("============================================================");
-    println!("Greeting:       Welcome to NEXUS OS Rust Development Studio!");
+    println!("Greeting:       Welcome to LUNARA OS Rust Development Studio!");
     println!("Architecture:   {}", env::consts::ARCH);
     println!("Target OS:      {}", env::consts::OS);
     println!("Family:         {}", env::consts::FAMILY);
@@ -547,11 +547,11 @@ statusbar { background-color: #121016; color: #b89da9; font-size: 9pt; }
 
 class RustStudioApp(Gtk.Window):
     def __init__(self):
-        super().__init__(title="NEXUS Rust Development Studio")
+        super().__init__(title="LUNARA Rust Development Studio")
         self.set_default_size(1180, 780)
         self.set_position(Gtk.WindowPosition.CENTER)
-        self.set_wmclass("nexus-studio", "Nexus-studio")
-        self.set_role("nexus-studio")
+        self.set_wmclass("lunara-studio", "Lunara-studio")
+        self.set_role("lunara-studio")
         self.set_decorated(True)
         self.connect("delete-event", self._on_delete_event)
         self.connect("destroy", self._on_destroy)
@@ -606,7 +606,7 @@ class RustStudioApp(Gtk.Window):
         # Brand / Title
         brand_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         title_lbl = Gtk.Label(xalign=0)
-        title_lbl.set_markup("<b>NEXUS Rust Studio</b>")
+        title_lbl.set_markup("<b>LUNARA Rust Studio</b>")
         title_lbl.get_style_context().add_class("title")
         self.sub_lbl = Gtk.Label(label="No project loaded", xalign=0)
         self.sub_lbl.get_style_context().add_class("subtitle")

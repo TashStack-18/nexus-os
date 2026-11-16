@@ -1,8 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Render the sophisticated pink-themed NEXUS desktop wallpaper and lock-screen background.
-Inspired by Reference 1 (organic contour wave topography) and Reference 2 (clean KDE layout).
-Palette: Deep charcoal, dusty rose, blush pink, muted mauve, subtle magenta, soft pink highlights.
+"""Render the sophisticated LUNARA OS desktop wallpaper and lock-screen background.
+Directly matching the user's primary reference collage:
+- Desktop: Deep plum night sky, silky flowing wave ribbons in dusty rose/magenta, glowing crescent moon,
+  celestial ribbon logo, LUNARA OS branding, and tagline.
+- Lock Screen: Cherry blossom branches framing upper-left, moonlit mountain ridge, tranquil lake reflection,
+  top branding and clock, left 'System Status' card, center login card frame, right 'Quick Info' card,
+  and bottom circular control buttons.
+Palette: Deep plum (#16101c), dark mauve (#24162a), dusty rose (#c9899e), blush pink (#f2a7bf), vibrant magenta (#d65d8c).
 """
 import os
 import sys
@@ -10,13 +15,13 @@ import math
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 
 W, H = 1920, 1080
-out_wall = sys.argv[1] if len(sys.argv) > 1 else "/tmp/nexus.png"
-out_lock = sys.argv[2] if len(sys.argv) > 2 else "/tmp/nexus-lock.png"
-out_avatar = sys.argv[3] if len(sys.argv) > 3 else os.path.join(os.path.dirname(out_wall), "nexus-avatar.png")
+out_wall = sys.argv[1] if len(sys.argv) > 1 else "/tmp/lunara.png"
+out_lock = sys.argv[2] if len(sys.argv) > 2 else "/tmp/lunara-lock.png"
+out_avatar = sys.argv[3] if len(sys.argv) > 3 else os.path.join(os.path.dirname(out_wall), "lunara-avatar.png")
 
 
 def mix(a, b, t):
-    return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(3))
+    return tuple(int(a[i] + (b[i] - a[i]) * t) for i in range(len(a)))
 
 
 def font(size, bold=False):
@@ -43,11 +48,47 @@ def font(size, bold=False):
     return ImageFont.load_default()
 
 
-def create_topographic_wallpaper():
-    # 1. Base gradient in deep charcoal and midnight mauve
-    top_col = (0x12, 0x10, 0x18)    # Deep charcoal
-    mid_col = (0x1A, 0x14, 0x24)    # Dark plum charcoal
-    bot_col = (0x24, 0x19, 0x2E)    # Muted dark mauve
+def draw_card(d, bbox, radius=16, fill=(26, 18, 30, 210), outline=(214, 93, 140, 110), width=1):
+    try:
+        d.rounded_rectangle(bbox, radius=radius, fill=fill, outline=outline, width=width)
+    except (AttributeError, TypeError):
+        d.rectangle(bbox, fill=fill, outline=outline, width=width)
+
+
+def draw_celestial_logo(d, cx, cy, size=48):
+    """Draw the glowing stylized celestial / crescent ribbon logo from the reference collage."""
+    s = size / 2.0
+    # Two interlinked glowing curved petals forming a stylized crescent ribbon
+    points_left = []
+    points_right = []
+    for deg in range(-90, 95, 5):
+        rad = math.radians(deg)
+        # Left crescent loop
+        x1 = cx - s * 0.4 + math.cos(rad) * s * 0.55
+        y1 = cy + math.sin(rad) * s * 0.95
+        points_left.append((x1, y1))
+
+    for deg in range(90, 275, 5):
+        rad = math.radians(deg)
+        # Right crescent loop
+        x2 = cx + s * 0.4 + math.cos(rad) * s * 0.55
+        y2 = cy + math.sin(rad) * s * 0.95
+        points_right.append((x2, y2))
+
+    # Glow strokes
+    for w, col in [(8, (214, 93, 140, 40)), (4, (242, 167, 191, 100)), (2, (253, 242, 246, 230))]:
+        if len(points_left) > 1:
+            d.line(points_left, fill=col, width=w, joint="curve")
+        if len(points_right) > 1:
+            d.line(points_right, fill=col, width=w, joint="curve")
+
+
+def create_desktop_wallpaper():
+    """Create the atmospheric desktop wallpaper matching Panel 1 of the reference collage."""
+    # 1. Base vertical gradient: Midnight plum (#16101c) to dark purple/mauve (#26152e)
+    top_col = (0x15, 0x0F, 0x1B)   # Deep midnight plum
+    mid_col = (0x1F, 0x13, 0x27)   # Dark velvet purple
+    bot_col = (0x28, 0x16, 0x33)   # Rich dark mauve
 
     im = Image.new("RGB", (W, H))
     d = ImageDraw.Draw(im)
@@ -60,73 +101,184 @@ def create_topographic_wallpaper():
             col = mix(mid_col, bot_col, (t - 0.5) * 2.0)
         d.line((0, y, W, y), fill=col)
 
-    # 2. Layered organic topographic contour waves (inspired by Reference 1)
-    layers = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    ld = ImageDraw.Draw(layers)
+    # 2. Glowing crescent moon dipping behind the silky waves in lower-middle right
+    moon_img = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    md = ImageDraw.Draw(moon_img)
+    mx, my = int(W * 0.49), int(H * 0.65)
+    m_rad = 34
 
-    # Focal centers for organic topographic rings
-    c1_x, c1_y = int(W * 0.48), int(H * 0.46)
-    c2_x, c2_y = int(W * 0.15), int(H * 0.85)
-    c3_x, c3_y = int(W * 0.85), int(H * 0.25)
+    # Ambient moon glow
+    for gr in range(120, 20, -10):
+        alpha = int(40 * (1.0 - gr / 120.0))
+        md.ellipse((mx - gr, my - gr, mx + gr, my + gr), fill=(242, 167, 191, alpha))
 
-    # Draw series of layered topographic contours with subtle drop shadows
-    contour_radii = [
-        (180, (0x38, 0x26, 0x44, 180), (0xF2, 0xA7, 0xBF, 60)),
-        (260, (0x30, 0x22, 0x3C, 160), (0xD6, 0x5D, 0x8C, 50)),
-        (350, (0x2A, 0x1E, 0x35, 150), (0xC9, 0x89, 0x9E, 45)),
-        (450, (0x24, 0x1B, 0x2F, 140), (0xB0, 0x72, 0x8A, 40)),
-        (560, (0x20, 0x18, 0x2A, 130), (0x96, 0x5E, 0x78, 35)),
-        (680, (0x1C, 0x15, 0x25, 120), (0x7D, 0x4D, 0x68, 30)),
-        (820, (0x18, 0x13, 0x21, 100), (0x68, 0x3E, 0x58, 25)),
-        (980, (0x15, 0x11, 0x1E, 90),  (0x56, 0x32, 0x4A, 20)),
-        (1160, (0x12, 0x0F, 0x1A, 80), (0x46, 0x28, 0x3D, 18)),
+    # Crescent moon body (slanted crescent tilted downwards as in reference)
+    md.ellipse((mx - m_rad, my - m_rad, mx + m_rad, my + m_rad), fill=(253, 242, 246, 220))
+    # Cutout ellipse to form delicate crescent
+    md.ellipse((mx - m_rad + 10, my - m_rad - 6, mx + m_rad + 6, my + m_rad - 6), fill=(0, 0, 0, 0))
+
+    # 3. Silky flowing wave ribbons across lower half (dusty rose and magenta)
+    ribbons = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    rd = ImageDraw.Draw(ribbons)
+
+    # Generate multi-layered silky undulating waves
+    wave_specs = [
+        # (base_y, amplitude, freq, phase, fill_rgba, edge_rgba)
+        (int(H * 0.58), 90, 0.0022, 1.2, (0x44, 0x1E, 0x38, 120), (0xF2, 0xA7, 0xBF, 60)),
+        (int(H * 0.66), 110, 0.0028, 2.5, (0x3C, 0x1A, 0x32, 140), (0xD6, 0x5D, 0x8C, 90)),
+        (int(H * 0.74), 130, 0.0020, 0.4, (0x32, 0x15, 0x2A, 170), (0xF2, 0xA7, 0xBF, 110)),
+        (int(H * 0.82), 115, 0.0025, 3.1, (0x28, 0x12, 0x24, 210), (0xC9, 0x89, 0x9E, 130)),
+        (int(H * 0.90), 80, 0.0032, 1.8, (0x20, 0x0E, 0x1C, 240), (0xD6, 0x5D, 0x8C, 150)),
     ]
 
-    for rad, fill_col, edge_col in contour_radii:
-        # Organic perturbed ellipse coordinates
-        rx = int(rad * 1.25)
-        ry = int(rad * 0.82)
-        bbox = (c1_x - rx, c1_y - ry, c1_x + rx, c1_y + ry)
-        ld.ellipse(bbox, outline=edge_col, width=2)
+    for base_y, amp, freq, phase, fill_col, edge_col in wave_specs:
+        poly_pts = [(0, H)]
+        top_curve = []
+        for x in range(0, W + 10, 10):
+            # Compound harmonic wave for silky fabric look
+            y = base_y + math.sin(x * freq + phase) * amp + math.cos(x * freq * 1.8 + phase * 0.7) * (amp * 0.35)
+            poly_pts.append((x, int(y)))
+            top_curve.append((x, int(y)))
+        poly_pts.append((W, H))
 
-    # Secondary landscape contours
-    for rad, edge_col in [
-        (280, (0xF2, 0xA7, 0xBF, 35)),
-        (420, (0xD6, 0x5D, 0x8C, 30)),
-        (580, (0xC9, 0x89, 0x9E, 25)),
-        (760, (0x96, 0x5E, 0x78, 20)),
-    ]:
-        bbox2 = (c2_x - rad, c2_y - int(rad * 0.7), c2_x + rad, c2_y + int(rad * 0.7))
-        ld.ellipse(bbox2, outline=edge_col, width=2)
-        bbox3 = (c3_x - rad, c3_y - int(rad * 0.7), c3_x + rad, c3_y + int(rad * 0.7))
-        ld.ellipse(bbox3, outline=edge_col, width=2)
+        rd.polygon(poly_pts, fill=fill_col)
+        # Highlight edge
+        rd.line(top_curve, fill=edge_col, width=2, joint="curve")
 
-    # 3. Soft ambient glow clouds (dusty rose and blush pink nebulae)
+    # 4. Soft atmospheric glow clouds
     glow = Image.new("RGB", (W, H), (0, 0, 0))
-    g = ImageDraw.Draw(glow)
-
+    gd = ImageDraw.Draw(glow)
     spheres = [
-        (0.20, 0.80, 0.40, (0x8A, 0x35, 0x60)),   # Deep dusty rose
-        (0.78, 0.30, 0.35, (0x9A, 0x45, 0x75)),   # Muted magenta
-        (0.48, 0.50, 0.30, (0xB5, 0x5E, 0x86)),   # Blush pink core
+        (0.50, 0.70, 0.35, (0xB5, 0x5E, 0x86)),   # Core wave glow
+        (0.20, 0.85, 0.30, (0x8A, 0x35, 0x60)),   # Left wave plum glow
+        (0.80, 0.55, 0.35, (0x9A, 0x45, 0x75)),   # Right ambient rose
     ]
     for cx, cy, r, col in spheres:
         rad = int(W * r)
-        g.ellipse((int(W * cx) - rad, int(H * cy) - rad, int(W * cx) + rad, int(H * cy) + rad), fill=col)
+        gd.ellipse((int(W * cx) - rad, int(H * cy) - rad, int(W * cx) + rad, int(H * cy) + rad), fill=col)
 
-    glow = glow.filter(ImageFilter.GaussianBlur(160))
-    blended = Image.blend(im, glow, 0.42)
+    glow = glow.filter(ImageFilter.GaussianBlur(130))
+    blended = Image.blend(im, glow, 0.38)
 
-    # Composite layers
-    result = Image.alpha_composite(blended.convert("RGBA"), layers)
-    return result.convert("RGB")
+    # Composite moon and ribbons
+    comp1 = Image.alpha_composite(blended.convert("RGBA"), moon_img)
+    comp2 = Image.alpha_composite(comp1, ribbons)
+
+    # 5. Add centered LUNARA OS branding and subtle accent divider
+    # (Conky renders the dynamic digital clock and date in the center space!)
+    d_final = ImageDraw.Draw(comp2)
+    draw_celestial_logo(d_final, W // 2, 290, size=52)
+
+    def centered(text, y, f, fill):
+        try:
+            bbox = d_final.textbbox((0, 0), text, font=f)
+            w = bbox[2] - bbox[0]
+        except AttributeError:
+            w = d_final.textlength(text, font=f)
+        d_final.text(((W - w) / 2, y), text, font=f, fill=fill)
+
+    # "LUNARA OS" in clean spaced capital font
+    centered("LUNARA OS", 335, font(26, bold=True), (0xFD, 0xF2, 0xF6, 245))
+    # Subtitle / Tagline
+    centered("Your space. Your workflow.", 378, font(13), (0xF2, 0xA7, 0xBF, 210))
+
+    # Horizontal accent divider beneath date area
+    div_y = 575
+    d_final.line(((W - 140) // 2, div_y, (W + 140) // 2, div_y), fill=(0xD6, 0x5D, 0x8C, 180), width=2)
+
+    return comp2.convert("RGB")
 
 
-def create_lock_screen(base_wp):
-    # Darken and frost the wallpaper for the lock screen
-    darken = Image.new("RGBA", (W, H), (14, 11, 18, 140))
-    lock = Image.alpha_composite(base_wp.convert("RGBA"), darken)
-    d = ImageDraw.Draw(lock)
+def create_lock_screen():
+    """Create the cherry-blossom moonlit mountain & lake lock screen matching Panel 2 of collage."""
+    im = Image.new("RGB", (W, H), (0x12, 0x0D, 0x18))
+    d = ImageDraw.Draw(im)
+
+    # 1. Nocturnal gradient sky: Dark plum (#130c18) to misty mauve horizon (#2b1a30)
+    for y in range(H):
+        t = y / float(H)
+        if t < 0.55:
+            col = mix((0x10, 0x0B, 0x16), (0x24, 0x16, 0x2C), t / 0.55)
+        else:
+            # Lake reflection gradient
+            col = mix((0x1E, 0x13, 0x24), (0x11, 0x0C, 0x16), (t - 0.55) / 0.45)
+        d.line((0, y, W, y), fill=col)
+
+    # 2. Moonlit mountain ridge silhouettes across horizon
+    mountain_pts = [(W * 0.45, int(H * 0.54))]
+    for x in range(int(W * 0.45), W + 20, 20):
+        rel_x = (x - W * 0.45) / (W * 0.55)
+        # Jagged alpine peaks on right side as in reference
+        peak1 = math.exp(-((rel_x - 0.6) ** 2) / 0.04) * 160
+        peak2 = math.exp(-((rel_x - 0.85) ** 2) / 0.05) * 210
+        peak3 = math.exp(-((rel_x - 0.3) ** 2) / 0.06) * 110
+        y = int(H * 0.54) - int(peak1 + peak2 + peak3)
+        mountain_pts.append((x, y))
+    mountain_pts.extend([(W, int(H * 0.55)), (int(W * 0.45), int(H * 0.55))])
+    d.polygon(mountain_pts, fill=(0x26, 0x1A, 0x2D))
+
+    # Mountain edge highlight (moonlit snow/rock contour)
+    for i in range(1, len(mountain_pts) - 2):
+        d.line((mountain_pts[i], mountain_pts[i + 1]), fill=(0xC9, 0x89, 0x9E, 140), width=2)
+
+    # 3. Waterline and serene lake ripples
+    water_y = int(H * 0.55)
+    d.line((0, water_y, W, water_y), fill=(0x4A, 0x2C, 0x48, 180), width=1)
+    for ry in range(water_y + 10, H, 14):
+        alpha = int(70 * (ry - water_y) / (H - water_y))
+        for rx in range(0, W, 80):
+            rlen = 45 + (rx * 7) % 35
+            d.line((rx, ry, rx + rlen, ry), fill=(0xD6, 0x5D, 0x8C, alpha), width=1)
+
+    # 4. Cherry blossom tree branches framing upper-left quadrant
+    blossom_layer = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    bd = ImageDraw.Draw(blossom_layer)
+
+    # Dark branch silhouettes
+    branches = [
+        # Main trunk/branch arcs
+        [(0, 0), (80, 50), (180, 90), (320, 140), (480, 180), (620, 210)],
+        [(180, 90), (260, 150), (360, 220), (460, 280), (540, 320)],
+        [(320, 140), (380, 90), (480, 60), (600, 45)],
+        [(80, 50), (140, 120), (220, 210), (300, 310), (380, 400)],
+        [(0, 120), (90, 170), (200, 230), (310, 280)],
+    ]
+    for br in branches:
+        bd.line(br, fill=(0x16, 0x0E, 0x1A, 255), width=7, joint="curve")
+        # Fine secondary branches
+        for i in range(len(br) - 1):
+            x1, y1 = br[i]
+            x2, y2 = br[i + 1]
+            bx = (x1 + x2) // 2 + 15
+            by = (y1 + y2) // 2 + 25
+            bd.line([(x1, y1), (bx, by)], fill=(0x18, 0x10, 0x1C, 240), width=3)
+
+    # Abundant glowing pink cherry blossom clusters
+    import random
+    rng = random.Random(42)  # Deterministic seed for aesthetic perfection
+    flower_colors = [
+        (0xF2, 0xA7, 0xBF, 230),   # Blush pink
+        (0xFD, 0xF2, 0xF6, 240),   # Pale petal white
+        (0xD6, 0x5D, 0x8C, 220),   # Magenta petal core
+        (0xE8, 0x8E, 0xB0, 210),   # Rose pink
+    ]
+
+    for br in branches:
+        for x, y in br:
+            for _ in range(14):
+                fx = x + rng.randint(-55, 65)
+                fy = y + rng.randint(-40, 60)
+                if fx < 0 or fx > int(W * 0.42) or fy < 0 or fy > int(H * 0.48):
+                    continue
+                col = rng.choice(flower_colors)
+                frad = rng.randint(4, 9)
+                bd.ellipse((fx - frad, fy - frad, fx + frad, fy + frad), fill=col)
+                # Delicate petal outline
+                bd.ellipse((fx - frad + 2, fy - frad + 2, fx + frad - 2, fy + frad - 2), fill=(0xFF, 0xFF, 0xFF, 120))
+
+    # Composite blossoms onto scenery
+    im_with_blossoms = Image.alpha_composite(im.convert("RGBA"), blossom_layer)
+    d = ImageDraw.Draw(im_with_blossoms)
 
     def centered(text, y, f, fill):
         try:
@@ -136,40 +288,103 @@ def create_lock_screen(base_wp):
             w = d.textlength(text, font=f)
         d.text(((W - w) / 2, y), text, font=f, fill=fill)
 
-    # Professional NEXUS branding at top of lock screen
-    centered("NEXUS OS", 80, font(44, bold=True), (0xFD, 0xF2, 0xF6, 240))
-    # Subtitle updated to: "Your space. Your workflow." as required!
-    centered("Your space. Your workflow.", 136, font(16), (0xF2, 0xA7, 0xBF, 200))
+    # 5. Top Center Branding, Clock, Date, and Location Pill (matching Reference Collage!)
+    draw_celestial_logo(d, W // 2, 85, size=46)
+    centered("LUNARA OS", 120, font(28, bold=True), (0xFD, 0xF2, 0xF6, 250))
+    centered("Your space. Your workflow.", 160, font(13), (0xF2, 0xA7, 0xBF, 215))
 
-    # Helper for rounded card or fallback to rectangle
-    draw_card = getattr(d, "rounded_rectangle", d.rectangle)
+    # Large Clock
+    centered("23:07", 195, font(74, bold=True), (0xFD, 0xF2, 0xF6, 250))
+    # Full Date
+    centered("Monday, 16 November 2026", 285, font(15), (0xC9, 0x89, 0x9E, 230))
 
-    # Subtle floating information widget on left
-    card_l = (80, H - 230, 430, H - 90)
-    try:
-        draw_card(card_l, radius=12, fill=(0x1A, 0x14, 0x22, 190), outline=(0xD6, 0x5D, 0x8C, 90), width=1)
-    except TypeError:
-        d.rectangle(card_l, fill=(0x1A, 0x14, 0x22, 190), outline=(0xD6, 0x5D, 0x8C, 90), width=1)
-    d.text((105, H - 210), "SYSTEM STATUS", font=font(12, bold=True), fill=(0xD6, 0x5D, 0x8C, 240))
-    d.text((105, H - 182), "• NEXUS Micro-OS 6.12 Kernel", font=font(11), fill=(0xFD, 0xF2, 0xF6, 210))
-    d.text((105, H - 158), "• Secure Linux PAM Engine", font=font(11), fill=(0xFD, 0xF2, 0xF6, 210))
-    d.text((105, H - 134), "• Status: Authenticated & Protected", font=font(11), fill=(0xC9, 0x89, 0x9E, 200))
+    # Location / Status Pill: ☁ 24°C • Bangalore
+    pill_w, pill_h = 210, 30
+    pill_x = (W - pill_w) // 2
+    pill_y = 320
+    draw_card(d, (pill_x, pill_y, pill_x + pill_w, pill_y + pill_h), radius=15,
+              fill=(0x22, 0x16, 0x2A, 190), outline=(0xD6, 0x5D, 0x8C, 90), width=1)
+    d.text((pill_x + 28, pill_y + 6), "☁  24°C  •  Bangalore", font=font(11), fill=(0xFD, 0xF2, 0xF6, 220))
 
-    # Subtle quick info widget on right
-    card_r = (W - 430, H - 230, W - 80, H - 90)
-    try:
-        draw_card(card_r, radius=12, fill=(0x1A, 0x14, 0x22, 190), outline=(0xD6, 0x5D, 0x8C, 90), width=1)
-    except TypeError:
-        d.rectangle(card_r, fill=(0x1A, 0x14, 0x22, 190), outline=(0xD6, 0x5D, 0x8C, 90), width=1)
-    d.text((W - 405, H - 210), "SESSION CONTROLS", font=font(12, bold=True), fill=(0xD6, 0x5D, 0x8C, 240))
-    d.text((W - 405, H - 182), "• Default User: student (pass: microos)", font=font(11), fill=(0xFD, 0xF2, 0xF6, 210))
-    d.text((W - 405, H - 158), "• Secondary User: tashvi (pass: microos)", font=font(11), fill=(0xFD, 0xF2, 0xF6, 210))
-    d.text((W - 405, H - 134), "• Shortcut: Super + L locks session", font=font(11), fill=(0xC9, 0x89, 0x9E, 200))
+    # 6. Center Row: Three Floating Cards
+    card_y = 390
+    card_h = 430
 
-    # Clean credential footnote at bottom
-    centered("Live Session  |  student:microos  |  tashvi:microos", H - 60, font(13), (0xC9, 0x89, 0x9E, 180))
+    # === LEFT CARD: System Status ===
+    cl_w = 270
+    cl_x = int(W * 0.12)
+    draw_card(d, (cl_x, card_y, cl_x + cl_w, card_y + card_h), radius=18,
+              fill=(0x1A, 0x12, 0x22, 215), outline=(0xD6, 0x5D, 0x8C, 110), width=1)
+    d.text((cl_x + 22, card_y + 22), "System Status", font=font(13, bold=True), fill=(0xFD, 0xF2, 0xF6, 240))
 
-    return lock.convert("RGB")
+    # Bars for CPU, RAM, Disk, Battery
+    vitals_data = [
+        ("CPU", "42%", 0.42, "▣"),
+        ("RAM", "17%", 0.17, "▤"),
+        ("Disk", "1%", 0.01, "💿"),
+        ("Battery", "100%", 1.00, "🔋"),
+    ]
+    bar_y = card_y + 65
+    for label, val_str, frac, icon in vitals_data:
+        d.text((cl_x + 22, bar_y), f"{icon}  {label}", font=font(11, bold=True), fill=(0xF2, 0xA7, 0xBF, 230))
+        d.text((cl_x + cl_w - 60, bar_y), val_str, font=font(11), fill=(0xFD, 0xF2, 0xF6, 220))
+        # Background bar
+        bg_bar = (cl_x + 22, bar_y + 24, cl_x + cl_w - 22, bar_y + 30)
+        draw_card(d, bg_bar, radius=3, fill=(0x38, 0x22, 0x3E, 200), outline=(0, 0, 0, 0))
+        # Fill bar
+        fill_w = max(4, int((cl_w - 44) * frac))
+        fg_bar = (cl_x + 22, bar_y + 24, cl_x + 22 + fill_w, bar_y + 30)
+        draw_card(d, fg_bar, radius=3, fill=(0xD6, 0x5D, 0x8C, 240), outline=(0, 0, 0, 0))
+        bar_y += 55
+
+    # Mini live footer in System Status
+    d.text((cl_x + 22, card_y + card_h - 45), "• NEXUS Micro-OS 6.12", font=font(10), fill=(0xC9, 0x89, 0x9E, 190))
+    d.text((cl_x + 22, card_y + card_h - 26), "• All 68 checks passed", font=font(10), fill=(0xC9, 0x89, 0x9E, 190))
+
+    # === RIGHT CARD: Quick Info ===
+    cr_w = 270
+    cr_x = W - int(W * 0.12) - cr_w
+    draw_card(d, (cr_x, card_y, cr_x + cr_w, card_y + card_h), radius=18,
+              fill=(0x1A, 0x12, 0x22, 215), outline=(0xD6, 0x5D, 0x8C, 110), width=1)
+    d.text((cr_x + 22, card_y + 22), "Quick Info", font=font(13, bold=True), fill=(0xFD, 0xF2, 0xF6, 240))
+
+    info_data = [
+        ("Wi-Fi", "LUNARA-Net", "📶"),
+        ("Uptime", "6m 58s", "⏱"),
+        ("Session", "XFCE", "🖥"),
+        ("Status", "Secured", "🛡"),
+    ]
+    info_y = card_y + 65
+    for label, val_str, icon in info_data:
+        d.text((cr_x + 22, info_y), f"{icon}  {label}", font=font(11, bold=True), fill=(0xF2, 0xA7, 0xBF, 230))
+        d.text((cr_x + 22, info_y + 20), val_str, font=font(11), fill=(0xFD, 0xF2, 0xF6, 220))
+        info_y += 55
+
+    d.text((cr_x + 22, card_y + card_h - 45), "• Secure Linux PAM Auth", font=font(10), fill=(0xC9, 0x89, 0x9E, 190))
+    d.text((cr_x + 22, card_y + card_h - 26), "• Super + L to lock", font=font(10), fill=(0xC9, 0x89, 0x9E, 190))
+
+    # === CENTER CARD: (LightDM GTK Greeter overlays here) ===
+    # Draw soft backdrop border guide so the screen looks fully coherent even when loading
+    cc_w = 380
+    cc_x = (W - cc_w) // 2
+    draw_card(d, (cc_x, card_y, cc_x + cc_w, card_y + card_h), radius=22,
+              fill=(0x1C, 0x13, 0x24, 230), outline=(0xD6, 0x5D, 0x8C, 120), width=1)
+
+    # 7. Bottom Quick Controls: Circular pill buttons matching Reference Collage!
+    ctrl_icons = ["📶", "🔊", "🔆", "⌨", "♿", "⏻"]
+    btn_rad = 22
+    total_btns = len(ctrl_icons)
+    spacing = 56
+    start_bx = (W - (total_btns - 1) * spacing) // 2
+    btn_y = H - 85
+
+    for idx, icon in enumerate(ctrl_icons):
+        bx = start_bx + idx * spacing
+        draw_card(d, (bx - btn_rad, btn_y - btn_rad, bx + btn_rad, btn_y + btn_rad), radius=btn_rad,
+                  fill=(0x22, 0x16, 0x2A, 210), outline=(0xD6, 0x5D, 0x8C, 90), width=1)
+        d.text((bx - 8, btn_y - 9), icon, font=font(12), fill=(0xFD, 0xF2, 0xF6, 230))
+
+    return im_with_blossoms.convert("RGB")
 
 
 def create_avatar(out_path):
@@ -178,7 +393,7 @@ def create_avatar(out_path):
     d = ImageDraw.Draw(av)
 
     # Outer circle in dusty rose / blush pink accent
-    d.ellipse((0, 0, size - 1, size - 1), fill=(0x2A, 0x1E, 0x2E, 255), outline=(0xD6, 0x5D, 0x8C, 255), width=3)
+    d.ellipse((0, 0, size - 1, size - 1), fill=(0x24, 0x17, 0x28, 255), outline=(0xD6, 0x5D, 0x8C, 255), width=3)
 
     # User silhouette in soft pink
     head_rad = 22
@@ -192,18 +407,21 @@ def create_avatar(out_path):
 
 
 def main():
-    wp = create_topographic_wallpaper()
+    print(f"Generating LUNARA desktop wallpaper -> {out_wall}")
+    wp = create_desktop_wallpaper()
     wp.save(out_wall)
 
-    lock = create_lock_screen(wp)
+    print(f"Generating LUNARA lock screen wallpaper -> {out_lock}")
+    lock = create_lock_screen()
     lock.save(out_lock)
 
+    print(f"Generating LUNARA user avatar -> {out_avatar}")
     try:
         create_avatar(out_avatar)
     except Exception as e:
         print(f"avatar warning: {e}")
 
-    print("art written")
+    print("LUNARA visual assets created successfully.")
 
 
 if __name__ == "__main__":

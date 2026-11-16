@@ -1,11 +1,11 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Task Manager & System Monitor
-Comment=Monitor processes, system resources, and CPU scheduling
-Exec=nexus-tasks
+Name=Task Manager
+Comment=LUNARA System Monitor
+Exec=lunara-tasks
 Icon=utilities-system-monitor
 Categories=System;Monitor;
 Terminal=false
 StartupNotify=true
-StartupWMClass=nexus-tasks
+StartupWMClass=lunara-tasks
