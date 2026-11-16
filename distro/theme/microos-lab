@@ -1,0 +1,356 @@
+#!/usr/bin/env python3
+"""NEXUS Scheduler Lab - the Micro-OS research (R3: fairness vs throughput)
+re-run on the real Linux kernel of this system.
+
+Same experiment as the Rust kernel's Scheduler Lab: a bimodal workload (75 %
+short jobs of 1-6 ms, 25 % long jobs of 20-80 ms) offered at 110 % load to ONE
+CPU core, for several scheduling policies. Real processes do the work; a small
+dispatcher (SIGSTOP/SIGCONT) applies the policy, and the Linux kernel's own
+schedulers run the same jobs for comparison.
+
+  throughput  = jobs finished per 100 ms
+  fairness    = Jain's index over the CPU time each job received in 250 ms
+                intervals (1.0 = everyone gets an equal share)
+
+    microos-lab            graphical lab (GTK)
+    microos-lab --cli      same experiment, text output  (--window SECONDS)
+"""
+import os
+import random
+import signal
+import sys
+import time
+
+CORE = 0
+LOAD = 1.10
+INTERVAL = 0.25
+POLICIES = [
+    ("FCFS", "fcfs", 0),
+    ("SJF", "sjf", 0),
+    ("SRTF", "srtf", 0),
+    ("HRRN", "hrrn", 0),
+    ("RR q=2", "rr", 2),
+    ("RR q=8", "rr", 8),
+    ("Linux EEVDF", "linux-other", 0),
+    ("Linux RR", "linux-rr", 0),
+]
+
+
+def gen_jobs(window, seed=7):
+    """(arrival_s, burst_ms) pairs: bimodal bursts, Poisson arrivals at LOAD."""
+    rng = random.Random(seed)
+    bursts_mean = 0.75 * 3.5 + 0.25 * 50.0
+    gap = bursts_mean / 1000.0 / LOAD
+    jobs, t = [], 0.0
+    while True:
+        t += rng.expovariate(1.0 / gap)
+        if t >= window:
+            # rescale arrivals so the offered load is exactly LOAD for this window
+            offered = sum(b for _, b in jobs) / 1000.0 / window
+            f = offered / LOAD
+            return [(a * f, b) for a, b in jobs if a * f < window]
+        burst = rng.randint(1, 6) if rng.random() < 0.75 else rng.randint(20, 80)
+        jobs.append((t, burst))
+
+
+def cpu_ns(pid):
+    try:
+        with open("/proc/%d/schedstat" % pid) as f:
+            return int(f.read().split()[0])
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+class Job:
+    __slots__ = ("pid", "arrival", "burst", "cpu", "done", "stopped")
+
+    def __init__(self, pid, arrival, burst):
+        self.pid, self.arrival, self.burst = pid, arrival, burst
+        self.cpu = 0.0      # ms of CPU received so far
+        self.done = False
+        self.stopped = True
+
+
+def spawn(burst_ms, stopped, linux_policy=None):
+    pid = os.fork()
+    if pid == 0:  # child: pin to one core, optionally stop, burn CPU, exit
+        try:
+            os.sched_setaffinity(0, {CORE})
+            if linux_policy == "rr":
+                os.sched_setscheduler(0, os.SCHED_RR, os.sched_param(10))
+            if stopped:
+                os.kill(os.getpid(), signal.SIGSTOP)
+            end = burst_ms / 1000.0
+            while time.process_time() < end:
+                pass
+        finally:
+            os._exit(0)
+    if stopped:
+        os.waitpid(pid, os.WUNTRACED)  # wait until it has really stopped
+    return pid
+
+
+def jain(xs):
+    s = sum(xs)
+    if not xs or s <= 0:
+        return None
+    return s * s / (len(xs) * sum(x * x for x in xs))
+
+
+def run_policy(kind, quantum, window, progress=None):
+    """One experiment: returns (jobs finished per 100 ms, Jain index or None)."""
+    jobs_spec = gen_jobs(window)
+    native = kind.startswith("linux")
+    lpol = "rr" if kind == "linux-rr" else None
+    jobs, ready, cur = [], [], None
+    run_since = 0.0
+    nxt = 0
+    t0 = time.monotonic()
+    next_sample = INTERVAL
+    prev = {}          # id(job) -> cpu at last sample (jobs arrived before it)
+    j_sum, j_n = 0.0, 0
+    finished = 0
+    try:
+        while True:
+            now = time.monotonic() - t0
+            if now >= window:
+                break
+            if progress:
+                progress(now / window)
+            while nxt < len(jobs_spec) and jobs_spec[nxt][0] <= now:
+                arr, burst = jobs_spec[nxt]
+                nxt += 1
+                pid = spawn(burst, stopped=not native, linux_policy=lpol)
+                j = Job(pid, arr, burst)
+                j.stopped = not native
+                jobs.append(j)
+                if not native:
+                    ready.append(j)
+            # account the running job and reap finished ones
+            if native:
+                for j in jobs:
+                    if not j.done:
+                        try:
+                            if os.waitpid(j.pid, os.WNOHANG)[0]:
+                                j.done, j.cpu = True, float(j.burst)
+                                finished += 1
+                            else:
+                                n = cpu_ns(j.pid)
+                                if n is not None:
+                                    j.cpu = n / 1e6
+                        except ChildProcessError:
+                            j.done, j.cpu = True, float(j.burst)
+                            finished += 1
+            else:
+                if cur is not None:
+                    n = cpu_ns(cur.pid)
+                    if n is not None:
+                        cur.cpu = n / 1e6
+                    try:
+                        if os.waitpid(cur.pid, os.WNOHANG)[0]:
+                            cur.done, cur.cpu = True, float(cur.burst)
+                            finished += 1
+                            ready.remove(cur)
+                            cur = None
+                    except ChildProcessError:
+                        cur.done, cur.cpu = True, float(cur.burst)
+                        finished += 1
+                        if cur in ready:
+                            ready.remove(cur)
+                        cur = None
+                nxt_job = cur
+                if kind == "fcfs":
+                    if cur is None and ready:
+                        nxt_job = ready[0]
+                elif kind == "sjf":
+                    if cur is None and ready:
+                        nxt_job = min(ready, key=lambda j: j.burst)
+                elif kind == "hrrn":
+                    if cur is None and ready:
+                        nxt_job = max(ready, key=lambda j: (now - j.arrival + j.burst) / j.burst)
+                elif kind == "srtf":
+                    if ready:
+                        nxt_job = min(ready, key=lambda j: j.burst - j.cpu)
+                elif kind == "rr":
+                    if cur is None and ready:
+                        nxt_job = ready[0]
+                    elif cur is not None and (time.monotonic() - run_since) * 1000 >= quantum and len(ready) > 1:
+                        ready.remove(cur)
+                        ready.append(cur)
+                        nxt_job = ready[0]
+                if nxt_job is not cur:
+                    if cur is not None:
+                        os.kill(cur.pid, signal.SIGSTOP)
+                    if nxt_job is not None:
+                        os.kill(nxt_job.pid, signal.SIGCONT)
+                        run_since = time.monotonic()
+                    cur = nxt_job
+            # Jain over jobs that had arrived before this interval began; jobs that
+            # finished inside it still count (their final CPU is known).
+            if now >= next_sample:
+                next_sample += INTERVAL
+                xs = []
+                for j in jobs:
+                    if id(j) in prev:
+                        xs.append(max(0.0, j.cpu - prev[id(j)]))
+                prev = {id(j): j.cpu for j in jobs if not j.done}
+                v = jain(xs)
+                if v is not None:
+                    j_sum += v
+                    j_n += 1
+            time.sleep(0.0005)
+    finally:
+        for j in jobs:
+            if not j.done:
+                try:
+                    os.kill(j.pid, signal.SIGKILL)
+                except OSError:
+                    pass
+        for j in jobs:
+            try:
+                os.waitpid(j.pid, 0)
+            except ChildProcessError:
+                pass
+    return finished * 0.1 / window, (j_sum / j_n if j_n else None)
+
+
+def available(kind):
+    if kind == "linux-rr":
+        return os.geteuid() == 0
+    return True
+
+
+def experiment(window, progress=None, on_row=None):
+    rows = []
+    pols = [p for p in POLICIES if available(p[1])]
+    for i, (label, kind, q) in enumerate(pols):
+        thr, fair = run_policy(kind, q, window, (lambda f, i=i: progress((i + f) / len(pols))) if progress else None)
+        rows.append((label, thr * 100, fair))
+        if on_row:
+            on_row(rows[-1])
+    return rows
+
+
+def verdict(rows):
+    best = max(rows, key=lambda r: r[1])
+    fair = [r for r in rows if r[2] is not None]
+    if not fair:
+        return ""
+    f = max(fair, key=lambda r: r[2])
+    s = "Most jobs finished: %s (%.2f per 100 ms, fairness %s). Fairest: %s (%.2f)." % (
+        best[0], best[1] / 100, "n/a" if best[2] is None else "%.2f" % best[2], f[0], f[2])
+    if best[0] != f[0]:
+        s += " Maximum throughput did not give fair sharing."
+    return s
+
+
+def cli(window):
+    print("Scheduler Lab (Linux %s): %.1f s per policy, 1 core, load %d%%" % (os.uname().release, window, LOAD * 100))
+    print("%-14s %14s %10s" % ("policy", "jobs/100ms", "fairness"))
+    rows = experiment(window, on_row=lambda r: print("%-14s %14.2f %10s" % (r[0], r[1] / 100, "n/a" if r[2] is None else "%.2f" % r[2]), flush=True))
+    print(verdict(rows))
+
+
+def gui():
+    import gi
+    gi.require_version("Gtk", "3.0")
+    from gi.repository import GLib, Gtk
+    import threading
+
+    win = Gtk.Window(title="Scheduler Lab")
+    win.set_default_size(900, 640)
+    win.connect("destroy", Gtk.main_quit)
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, margin=16)
+    win.add(box)
+    title = Gtk.Label(xalign=0)
+    title.set_markup("<big><b>Fairness vs throughput</b></big>\nDoes maximum throughput give fair sharing? Real jobs on this Linux kernel, one CPU core, 110% load.")
+    box.pack_start(title, False, False, 0)
+    top = Gtk.Box(spacing=10)
+    btn = Gtk.Button(label="Run experiment")
+    prog = Gtk.ProgressBar(hexpand=True, valign=Gtk.Align.CENTER)
+    top.pack_start(btn, False, False, 0)
+    top.pack_start(prog, True, True, 0)
+    box.pack_start(top, False, False, 0)
+    data = []
+    area = Gtk.DrawingArea()
+    area.set_size_request(-1, 300)
+    box.pack_start(area, True, True, 0)
+
+    store = Gtk.ListStore(str, str, str)
+    tv = Gtk.TreeView(model=store)
+    for i, h in enumerate(("Policy", "Jobs per 100 ms", "Fairness (Jain)")):
+        tv.append_column(Gtk.TreeViewColumn(h, Gtk.CellRendererText(), text=i))
+    box.pack_start(tv, False, False, 0)
+    note = Gtk.Label(xalign=0, wrap=True)
+    box.pack_start(note, False, False, 0)
+
+    colors = [(0.55, 0.6, 0.7), (1, 0.7, 0.3), (1, 0.37, 0.34), (0.66, 0.55, 1), (0.2, 0.82, 0.75), (0.36, 0.55, 1), (0.4, 0.9, 0.4), (0.9, 0.9, 0.4)]
+
+    def draw(w, cr):
+        W, H = w.get_allocated_width(), w.get_allocated_height()
+        l, r, t, b = 60, W - 20, 10, H - 30
+        cr.set_source_rgb(0.1, 0.12, 0.18)
+        cr.rectangle(l, t, r - l, b - t)
+        cr.fill()
+        cr.set_source_rgba(1, 1, 1, 0.15)
+        cr.set_line_width(1)
+        for k in range(5):
+            y = b - (b - t) * k / 4
+            cr.move_to(l, y)
+            cr.line_to(r, y)
+            cr.stroke()
+            cr.set_source_rgba(1, 1, 1, 0.6)
+            cr.move_to(20, y + 4)
+            cr.show_text("%.2f" % (k / 4))
+            cr.set_source_rgba(1, 1, 1, 0.15)
+        cr.set_source_rgba(1, 1, 1, 0.7)
+        cr.move_to(l, H - 8)
+        cr.show_text("jobs finished per 100 ms  ->  (y axis: Jain fairness)")
+        if data:
+            xmax = max(d[1] for d in data) * 1.15 or 1
+            for i, (lab, thr, fair) in enumerate(data):
+                if fair is None:
+                    continue
+                x, y = l + (r - l) * thr / xmax, b - (b - t) * fair
+                cr.set_source_rgb(*colors[i % len(colors)])
+                cr.arc(x, y, 7, 0, 6.3)
+                cr.fill()
+                cr.move_to(x + 10, y + 4)
+                cr.show_text(lab)
+
+    area.connect("draw", draw)
+
+    def add_row(row):
+        data.append((row[0], row[1] / 100, row[2]))
+        store.append([row[0], "%.2f" % (row[1] / 100), "n/a" if row[2] is None else "%.2f" % row[2]])
+        area.queue_draw()
+
+    def work():
+        rows = experiment(4.0, progress=lambda f: GLib.idle_add(prog.set_fraction, f),
+                          on_row=lambda r: GLib.idle_add(add_row, r))
+        def fin():
+            note.set_text(verdict(rows))
+            btn.set_sensitive(True)
+            prog.set_fraction(1.0)
+        GLib.idle_add(fin)
+
+    def start(_):
+        data.clear()
+        store.clear()
+        note.set_text("")
+        btn.set_sensitive(False)
+        threading.Thread(target=work, daemon=True).start()
+
+    btn.connect("clicked", start)
+    win.show_all()
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    if "--cli" in sys.argv:
+        w = 4.0
+        if "--window" in sys.argv:
+            w = float(sys.argv[sys.argv.index("--window") + 1])
+        cli(w)
+    else:
+        gui()

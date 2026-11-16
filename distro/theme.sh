@@ -11,7 +11,7 @@ log() { echo "[theme] $*"; }
 
 log "installing the screen locker"
 chroot "$R" env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::http::Proxy="$PROXY" -qq -y \
-    --no-install-recommends install xfce4-screensaver fonts-dejavu-core papirus-icon-theme librsvg2-common >/dev/null
+    --no-install-recommends install xfce4-screensaver fonts-dejavu-core papirus-icon-theme librsvg2-common conky-std python3 python3-gi python3-gi-cairo gir1.2-gtk-3.0 >/dev/null
 
 log "rendering wallpaper and lock-screen background"
 mkdir -p "$R/usr/share/backgrounds"
@@ -100,6 +100,17 @@ mk_launcher 11 "Terminal" "xfce4-terminal" "utilities-terminal"
 mk_launcher 12 "Files" "thunar" "system-file-manager"
 mk_launcher 13 "Snap Store" "snap run snap-store" "system-software-install"
 mk_launcher 14 "Micro-OS kernel" "xfce4-terminal --title=Micro-OS-kernel -e micro-os-kernel" "utilities-system-monitor"
+install -m 0755 "$HERE/theme/microos-lab" "$R/usr/local/bin/microos-lab"
+cat > "$R/usr/share/applications/microos-lab.desktop" <<CONF
+[Desktop Entry]
+Type=Application
+Name=Scheduler Lab
+Comment=Fairness vs throughput (Micro-OS research) on this kernel
+Exec=microos-lab
+Icon=applications-science
+Categories=System;
+CONF
+mk_launcher 16 "Scheduler Lab" "microos-lab" "applications-science"
 mk_launcher 15 "Network" "nm-connection-editor" "preferences-system-network"
 
 launcher() { echo "<property name=\"plugin-$1\" type=\"string\" value=\"launcher\"><property name=\"items\" type=\"array\"><value type=\"string\" value=\"$1.desktop\"/></property></property>"; }
@@ -119,7 +130,7 @@ cat > "$X/xfce4-panel.xml" <<CONF
       <property name="background-style" type="uint" value="1"/>
       <property name="background-rgba" type="array"><value type="double" value="0.03"/><value type="double" value="0.04"/><value type="double" value="0.09"/><value type="double" value="0.85"/></property>
       <property name="plugin-ids" type="array">
-        <value type="int" value="1"/><value type="int" value="2"/><value type="int" value="3"/><value type="int" value="4"/><value type="int" value="6"/><value type="int" value="7"/>
+        <value type="int" value="1"/><value type="int" value="2"/><value type="int" value="3"/><value type="int" value="4"/><value type="int" value="8"/><value type="int" value="6"/><value type="int" value="7"/>
       </property>
     </property>
     <property name="panel-2" type="empty">
@@ -132,7 +143,7 @@ cat > "$X/xfce4-panel.xml" <<CONF
       <property name="background-style" type="uint" value="1"/>
       <property name="background-rgba" type="array"><value type="double" value="0.07"/><value type="double" value="0.09"/><value type="double" value="0.16"/><value type="double" value="0.8"/></property>
       <property name="plugin-ids" type="array">
-        <value type="int" value="11"/><value type="int" value="12"/><value type="int" value="13"/><value type="int" value="14"/><value type="int" value="15"/>
+        <value type="int" value="11"/><value type="int" value="12"/><value type="int" value="13"/><value type="int" value="14"/><value type="int" value="16"/><value type="int" value="15"/>
       </property>
     </property>
   </property>
@@ -141,9 +152,10 @@ cat > "$X/xfce4-panel.xml" <<CONF
       <property name="button-title" type="string" value="NEXUS"/>
       <property name="show-button-title" type="bool" value="true"/>
     </property>
-    <property name="plugin-2" type="string" value="tasklist"><property name="show-labels" type="bool" value="true"/><property name="grouping" type="uint" value="1"/></property>
+    <property name="plugin-2" type="string" value="tasklist"><property name="expand" type="bool" value="false"/><property name="flat-buttons" type="bool" value="true"/><property name="show-labels" type="bool" value="true"/><property name="grouping" type="uint" value="1"/></property>
     <property name="plugin-3" type="string" value="separator"><property name="expand" type="bool" value="true"/><property name="style" type="uint" value="0"/></property>
-    <property name="plugin-4" type="string" value="clock"><property name="mode" type="uint" value="2"/><property name="digital-layout" type="uint" value="3"/><property name="digital-time-format" type="string" value="%A %d %B   %H:%M"/></property>
+    <property name="plugin-4" type="string" value="clock"><property name="mode" type="uint" value="2"/><property name="digital-layout" type="uint" value="3"/><property name="digital-time-format" type="string" value="%H:%M"/></property>
+    <property name="plugin-8" type="string" value="separator"><property name="expand" type="bool" value="true"/><property name="style" type="uint" value="0"/></property>
     <property name="plugin-6" type="string" value="systray"/>
     <property name="plugin-7" type="string" value="actions"/>
     $(launcher 11)
@@ -151,8 +163,93 @@ cat > "$X/xfce4-panel.xml" <<CONF
     $(launcher 13)
     $(launcher 14)
     $(launcher 15)
+    $(launcher 16)
   </property>
 </channel>
+CONF
+# Desktop widgets (conky): big clock, system card, scheduler card, like the NEXUS desktop
+C="$H/.config/conky"; A="$H/.config/autostart"
+mkdir -p "$C" "$A"
+cat > "$C/clock.conf" <<'CONF'
+conky.config = {
+  alignment = 'top_middle', gap_y = 44, minimum_width = 520, maximum_width = 520,
+  own_window = true, own_window_type = 'desktop', own_window_transparent = true,
+  own_window_argb_visual = true, own_window_argb_value = 0, own_window_colour = '000000',
+  own_window_hints = 'undecorated,below,sticky,skip_taskbar,skip_pager',
+  double_buffer = true, update_interval = 1, use_xft = true,
+  default_color = 'F6F8FC', draw_shades = true, default_shade_color = '000000',
+}
+conky.text = [[
+${alignc}${font DejaVu Sans:size=16}${time %A, %-d %B}
+${voffset -6}${alignc}${font DejaVu Sans:size=88:bold}${time %H:%M}
+${voffset -10}${alignc}${font DejaVu Sans:size=11}${color A7B2C8}Micro-OS Linux · up ${uptime}
+]]
+CONF
+cat > "$C/system.conf" <<'CONF'
+conky.config = {
+  alignment = 'top_left', gap_x = 20, gap_y = 48, minimum_width = 232, maximum_width = 232,
+  own_window = true, own_window_type = 'desktop', own_window_argb_visual = true,
+  own_window_argb_value = 150, own_window_colour = '0A1128',
+  own_window_hints = 'undecorated,below,sticky,skip_taskbar,skip_pager',
+  double_buffer = true, update_interval = 1, use_xft = true, font = 'DejaVu Sans:size=10',
+  default_color = 'F6F8FC', border_inner_margin = 16, border_outer_margin = 0,
+}
+conky.text = [[
+${color A7B2C8}${font DejaVu Sans:size=9:bold}SYSTEM${font}${color}
+${voffset 6}CPU ${alignr}${cpu cpu0}%
+${cpubar cpu0 6,232}
+${voffset 4}Memory ${alignr}${memperc}%
+${membar 6,232}
+${voffset 4}Load ${alignr}${loadavg}
+Tasks ${alignr}${running_processes} / ${processes}
+${voffset 10}${color A7B2C8}${font DejaVu Sans:size=9:bold}${time %B %Y}${font}${color}
+${font DejaVu Sans Mono:size=10}${execpi 3600 python3 -c "import calendar,datetime as d; t=d.date.today(); print('\n'.join(calendar.TextCalendar(0).formatmonth(t.year,t.month).splitlines()[1:]))"}
+]]
+CONF
+cat > "$C/sched.conf" <<'CONF'
+conky.config = {
+  alignment = 'top_right', gap_x = 20, gap_y = 48, minimum_width = 232, maximum_width = 232,
+  own_window = true, own_window_type = 'desktop', own_window_argb_visual = true,
+  own_window_argb_value = 150, own_window_colour = '0A1128',
+  own_window_hints = 'undecorated,below,sticky,skip_taskbar,skip_pager',
+  double_buffer = true, update_interval = 1, use_xft = true, font = 'DejaVu Sans:size=10',
+  default_color = 'F6F8FC', border_inner_margin = 16, border_outer_margin = 0,
+}
+conky.text = [[
+${color A7B2C8}${font DejaVu Sans:size=9:bold}SCHEDULER${font}${color}
+${voffset 6}${font DejaVu Sans:size=13:bold}Linux EEVDF${font}
+${color A7B2C8}${kernel} · preemptive
+${voffset 8}${color}Context switches ${alignr}${execi 1 awk '/^ctxt/{print $2}' /proc/stat > /tmp/.ctx1; echo $(( $(cat /tmp/.ctx1) - $(cat /tmp/.ctx0 2>/dev/null || cat /tmp/.ctx1) )); cp /tmp/.ctx1 /tmp/.ctx0}/s
+Runnable tasks ${alignr}${running_processes}
+CPU cores ${alignr}${exec nproc}
+${voffset 8}${color 34D1BF}Scheduler Lab (dock): fairness
+${color 34D1BF}vs throughput for FCFS, SJF,
+${color 34D1BF}SRTF, HRRN, RR and Linux.
+]]
+CONF
+for n in clock system sched; do
+cat > "$A/conky-$n.desktop" <<CONF
+[Desktop Entry]
+Type=Application
+Name=NEXUS widget $n
+Exec=sh -c "sleep 3; conky -c /home/student/.config/conky/$n.conf"
+X-GNOME-Autostart-enabled=true
+CONF
+done
+# Use the largest screen mode (up to 1920 wide) as soon as the desktop starts
+cat > "$R/usr/local/bin/microos-display" <<'CONF'
+#!/bin/sh
+out=$(xrandr | awk '/ connected/{print $1; exit}')
+mode=$(xrandr | awk '/ connected/{f=1; next} f && /^ +[0-9]+x[0-9]+/{split($1,a,"x"); if (a[1]<=1920) {print $1; exit}}')
+[ -n "$out" ] && [ -n "$mode" ] && xrandr --output "$out" --mode "$mode"
+CONF
+chmod 0755 "$R/usr/local/bin/microos-display"
+cat > "$A/microos-display.desktop" <<CONF
+[Desktop Entry]
+Type=Application
+Name=Screen mode
+Exec=/usr/local/bin/microos-display
+X-GNOME-Autostart-enabled=true
 CONF
 chroot "$R" chown -R student:student /home/student
 log "done (GTK theme $GTK)"
