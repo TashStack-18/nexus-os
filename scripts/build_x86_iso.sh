@@ -6,7 +6,8 @@
 #
 # The ISO contains GRUB and the kernel ELF (kernel/target/x86_64-unknown-none/
 # release/microos). GRUB loads the kernel through Multiboot2; the kernel then
-# runs directly on the (virtual) PC: VGA screen, PS/2 keyboard, PIT timer.
+# runs directly on the (virtual) PC and draws its own desktop (framebuffer,
+# PS/2 keyboard and mouse, PIT timer).
 # Boots in VirtualBox / VMware (BIOS) or from a USB stick on a PC in legacy
 # BIOS mode. No emulator is involved.
 set -euo pipefail
@@ -23,9 +24,10 @@ cat > "$WORK/boot/grub/grub.cfg" <<EOF
 set timeout=5
 set default=${DEFAULT:-0}
 insmod all_video
-set gfxpayload=text
+set gfxmode=1024x768x32,auto
+set gfxpayload=keep
 
-menuentry "Micro-OS (Rust kernel) - interactive shell" {
+menuentry "Micro-OS (Rust kernel) - desktop" {
     multiboot2 /boot/microos.elf test=shell trace=0
     boot
 }
@@ -33,11 +35,11 @@ menuentry "Micro-OS (Rust kernel) - run all tests (TC1-TC6, sync, memory, system
     multiboot2 /boot/microos.elf test=all trace=0
     boot
 }
-menuentry "Micro-OS (Rust kernel) - shell, Shortest Job First scheduler" {
+menuentry "Micro-OS (Rust kernel) - desktop, Shortest Job First scheduler" {
     multiboot2 /boot/microos.elf test=shell trace=0 policy=sjf
     boot
 }
-menuentry "Micro-OS (Rust kernel) - shell, Multi-Level Feedback Queue" {
+menuentry "Micro-OS (Rust kernel) - desktop, Multi-Level Feedback Queue" {
     multiboot2 /boot/microos.elf test=shell trace=0 policy=mlfq
     boot
 }

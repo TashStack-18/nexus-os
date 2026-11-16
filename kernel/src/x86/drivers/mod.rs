@@ -4,6 +4,7 @@
 //! kernel is unchanged.
 
 mod keyboard;
+pub mod gui;
 pub mod qemu_exit;
 pub mod sbi;
 pub mod uart;

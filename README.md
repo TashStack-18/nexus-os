@@ -129,12 +129,21 @@ instruction kills only the offending program, `-EFAULT` for a bad pointer,
 the other programs survive. Paging is off, so this is privilege separation,
 not memory isolation (stated in the code and docs).
 
-## Bootable ISO for a PC (x86-64)
+## Bootable ISO for a PC (x86-64): a desktop written in Rust
 
-The same kernel also runs on a PC without any emulator: `scripts/build_x86_iso.sh` builds
-`micro-os-x86.iso` (GRUB + Multiboot2). Boot it in VirtualBox or VMware (BIOS) and the Rust
-kernel runs the machine: VGA screen, PS/2 keyboard, PIT timer, ring-3 programs with `int 0x80`
-system calls. All 68 in-kernel checks pass on x86-64 too. See [docs/x86_port.md](docs/x86_port.md).
+The same kernel also runs on a PC without any emulator. `scripts/build_x86_iso.sh` builds
+`micro-os-x86.iso` (GRUB + Multiboot2, 17 MB). In **VirtualBox or VMware** the Rust kernel takes
+over the machine and draws its own everyday desktop: wallpaper, desktop icons, windows, a taskbar
+with a Start menu and clock, and a mouse. The apps are a Terminal (the kernel shell), a Task Manager
+(live tasks, CPU share, End task) and System Info. Everything shown is read from the running kernel.
+
+| | |
+|---|---|
+| ![Desktop](results/screenshots/x86_1_desktop.png) | **Desktop.** The shell in a window; `user priv` was stopped by a general protection fault in ring 3. |
+| ![Task Manager](results/screenshots/x86_3_task_manager.png) | **Task Manager.** A busy program at 99% CPU, with the real scheduler's numbers. |
+
+All 68 in-kernel checks pass on x86-64 too; only the hardware layer differs from the RISC-V build.
+See [docs/x86_port.md](docs/x86_port.md).
 
 ## Micro-OS Linux (`distro/`)
 

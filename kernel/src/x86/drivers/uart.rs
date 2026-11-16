@@ -6,7 +6,7 @@
 use core::fmt;
 use core::sync::atomic::{AtomicU8, Ordering::Relaxed};
 
-use super::{keyboard, vga};
+use super::{gui, keyboard, vga};
 use crate::arch::{inb, outb};
 
 pub const UART0_BASE: usize = 0x3F8; // COM1 I/O port base
@@ -73,8 +73,11 @@ impl Uart {
 
     /// A key from the PS/2 keyboard or a byte from COM1, if one is waiting.
     pub fn try_read_byte(&mut self) -> Option<u8> {
-        if let Some(b) = keyboard::try_read() {
-            return Some(b);
+        // With the desktop running, keys typed into the Terminal window
+        // arrive through its queue; the desktop owns the PS/2 controller.
+        let key = if gui::active() { gui::pop_key() } else { keyboard::try_read() };
+        if key.is_some() {
+            return key;
         }
         if self.com_present() {
             // SAFETY: COM1 is present; reading RBR consumes the waiting byte.

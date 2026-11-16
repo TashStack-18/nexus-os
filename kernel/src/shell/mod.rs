@@ -41,6 +41,9 @@ pub fn run(args: &BootArgs) -> u32 {
     let bursts = if policy.needs_bursts() { BurstInfo::Predicted } else { BurstInfo::Oracle };
     scheduler::begin(Config { label: "shell".into(), policy, quantum, preemptive: true, bursts, ..Config::default() });
     scheduler::spawn("shell", SpawnOpts { prio: 0, ..SpawnOpts::default() }, shell_main).expect("could not start the shell");
+    // On a PC booted in a graphics mode, the desktop shows the shell in a window.
+    #[cfg(target_arch = "x86_64")]
+    crate::drivers::gui::start();
     PANEL_MODE.store(args.flag("monitor", false), Relaxed);
     if args.flag("monitor", false) {
         let interval_ms = args.get_u64("monitor_ms").unwrap_or(250).max(20);
@@ -127,11 +130,17 @@ fn shell_main() {
         }
     }
     SHELL_DONE.store(true, Relaxed);
-    let others = scheduler::snapshot().iter().filter(|t| t.name != "shell" && t.name != "monitor").count();
+    let others = scheduler::snapshot().iter().filter(|t| !matches!(t.name, "shell" | "monitor" | "desktop")).count();
     if others > 0 {
         println!("waiting for {} background task(s) to finish...", others);
     }
     println!("bye");
+}
+
+/// Has the shell exited (the user typed `exit`)?
+#[cfg(target_arch = "x86_64")]
+pub fn finished() -> bool {
+    SHELL_DONE.load(Relaxed)
 }
 
 /// Live monitor task: one machine-readable snapshot per interval.

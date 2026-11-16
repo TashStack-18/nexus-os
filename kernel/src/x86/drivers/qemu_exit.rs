@@ -12,6 +12,13 @@ use crate::kernel::console;
 pub fn exit(code: u32) -> ! {
     arch::intr_off();
     let _ = writeln!(console::emergency_writer(), "\nMicro-OS halted (exit code {}).", code);
+    if super::gui::active() {
+        super::gui::final_screen(match code {
+            0 => "Micro-OS has shut down. It is now safe to turn off the computer.",
+            101 => "Micro-OS stopped after a kernel error (see the messages above).",
+            _ => "Micro-OS has stopped. It is now safe to turn off the computer.",
+        });
+    }
     // SAFETY: these ports are the ACPI PM1a control registers of the
     // supported virtual machines and QEMU's debug-exit port; writing them
     // only requests a power-off.

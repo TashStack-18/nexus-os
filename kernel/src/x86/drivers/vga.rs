@@ -4,11 +4,64 @@
 //! UTF-8, mapping the shell's symbols to the PC's code page 437.
 
 use core::cell::UnsafeCell;
+use core::sync::atomic::{AtomicBool, AtomicUsize, Ordering::Relaxed};
 
 use crate::arch::outb;
 
-const COLS: usize = 80;
-const ROWS: usize = 25;
+pub const COLS: usize = 80;
+pub const ROWS: usize = 25;
+
+/// Graphics mode: the same character grid is kept in memory (GRID) and the
+/// desktop's Terminal window draws it with a font, instead of the VGA text
+/// buffer. Each cell is `attr << 8 | code page 437 glyph`, as in VGA.
+static GRAPHICS: AtomicBool = AtomicBool::new(false);
+static DIRTY: AtomicBool = AtomicBool::new(true);
+static CURSOR: AtomicUsize = AtomicUsize::new(0);
+struct Grid(UnsafeCell<[u16; COLS * ROWS]>);
+// SAFETY: written under the console lock; the desktop copies it (`snapshot`)
+// and tolerates a frame showing a half-written line.
+unsafe impl Sync for Grid {}
+static GRID: Grid = Grid(UnsafeCell::new([0x0720; COLS * ROWS]));
+
+/// Switch the console to the in-memory grid (called when the desktop starts).
+pub fn use_grid() {
+    GRAPHICS.store(true, Relaxed);
+}
+
+/// Make the next `snapshot` copy the grid even if nothing changed.
+pub fn mark_dirty() {
+    DIRTY.store(true, Relaxed);
+}
+
+/// Copy the grid if it changed since the last call; returns the cursor cell.
+pub fn snapshot(out: &mut [u16; COLS * ROWS]) -> Option<usize> {
+    if !DIRTY.swap(false, Relaxed) {
+        return None;
+    }
+    // SAFETY: see `Grid`.
+    out.copy_from_slice(unsafe { &*GRID.0.get() });
+    Some(CURSOR.load(Relaxed))
+}
+
+/// Code page 437 glyph -> Unicode, for drawing the grid with a Unicode font.
+pub fn cp437_to_char(g: u8) -> char {
+    match g {
+        0x20..=0x7E => g as char,
+        0xC4 => '─',
+        0xB3 => '│',
+        0xFB => '√', // the font has no ✓; √ is the check mark of code page 437
+        0xFA => '·',
+        0xE6 => 'µ',
+        0xFE => '■',
+        0x1A => '→',
+        0x1B => '←',
+        0xF3 => '≤',
+        0xF2 => '≥',
+        0xF1 => '±',
+        0xF8 => '°',
+        _ => ' ',
+    }
+}
 const BUF: usize = 0xB8000;
 const DEFAULT_ATTR: u8 = 0x07; // light grey on black
 
@@ -53,12 +106,30 @@ static SCREEN: State = State(UnsafeCell::new(Screen {
 const ANSI_TO_VGA: [u8; 8] = [0, 4, 2, 6, 1, 5, 3, 7];
 
 fn cell(i: usize, v: u16) {
+    if GRAPHICS.load(Relaxed) {
+        // SAFETY: see `Grid`; i < COLS * ROWS.
+        let changed = unsafe {
+            let g = &mut *GRID.0.get();
+            let changed = g[i] != v;
+            g[i] = v;
+            changed
+        };
+        DIRTY.store(true, Relaxed);
+        if changed {
+            super::gui::draw_cell_direct(i, v);
+        }
+        return;
+    }
     // SAFETY: i < COLS * ROWS, inside the VGA text buffer, which is
     // identity-mapped device memory.
     unsafe { core::ptr::write_volatile((BUF as *mut u16).add(i), v) };
 }
 
 fn read_cell(i: usize) -> u16 {
+    if GRAPHICS.load(Relaxed) {
+        // SAFETY: see `Grid`.
+        return unsafe { (*GRID.0.get())[i] };
+    }
     // SAFETY: as for `cell`.
     unsafe { core::ptr::read_volatile((BUF as *const u16).add(i)) }
 }
@@ -215,6 +286,11 @@ impl Screen {
 
     fn cursor(&self) {
         let pos = (self.row * COLS + self.col.min(COLS - 1)) as u16;
+        if GRAPHICS.load(Relaxed) {
+            CURSOR.store(pos as usize, Relaxed);
+            DIRTY.store(true, Relaxed);
+            return;
+        }
         // SAFETY: CRT controller index/data ports; only the cursor moves.
         unsafe {
             outb(0x3D4, 0x0F);

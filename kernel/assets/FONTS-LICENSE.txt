@@ -1,0 +1,2 @@
+Terminus Font (terminus16.psf, terminus16b.psf), from Debian console-setup.
+Copyright (c) Dimitar Toshkov Zhekov. Licensed under the SIL Open Font License 1.1.

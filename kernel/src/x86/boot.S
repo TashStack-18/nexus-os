@@ -19,6 +19,13 @@ mb2_header:
     .long mb2_header_end - mb2_header
     .long 0x100000000 - (0xE85250D6 + (mb2_header_end - mb2_header))
     .align 8
+    .short 5                          # framebuffer tag: ask GRUB for a graphics mode
+    .short 1                          # optional: fall back to VGA text if unavailable
+    .long 20
+    .long 1024                        # width
+    .long 768                         # height
+    .long 32                          # bits per pixel
+    .align 8
     .short 0                          # end tag
     .short 0
     .long 8
@@ -33,13 +40,22 @@ _start:
     mov edi, eax                      # keep magic and info for kmain
     mov esi, ebx
 
-    # PML4[0] -> PDPT, PDPT[0] -> PD, PD[i] -> 2 MiB page i (present, writable, user, huge)
+    # PML4[0] -> PDPT, PDPT[0..3] -> four PDs, PD entry i -> 2 MiB page i
+    # (present, writable, user, huge): an identity map of the first 4 GiB,
+    # which also covers the framebuffer GRUB sets up (often near 3-4 GiB).
     mov eax, offset boot_pdpt
     or eax, 0x7
     mov dword ptr [boot_pml4], eax
-    mov eax, offset boot_pd
+    xor ecx, ecx
+0:
+    mov eax, ecx
+    shl eax, 12
+    add eax, offset boot_pd
     or eax, 0x7
-    mov dword ptr [boot_pdpt], eax
+    mov dword ptr [boot_pdpt + ecx*8], eax
+    inc ecx
+    cmp ecx, 4
+    jne 0b
     xor ecx, ecx
 1:
     mov eax, ecx
@@ -47,7 +63,7 @@ _start:
     or eax, 0x87
     mov dword ptr [boot_pd + ecx*8], eax
     inc ecx
-    cmp ecx, 512
+    cmp ecx, 2048
     jne 1b
 
     mov eax, offset boot_pml4
@@ -105,7 +121,7 @@ boot_pml4:
 boot_pdpt:
     .zero 4096
 boot_pd:
-    .zero 4096
+    .zero 4096 * 4
 
     .align 16
 boot_gdt:

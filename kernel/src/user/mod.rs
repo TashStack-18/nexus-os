@@ -266,7 +266,7 @@ fn uwrite_num(label: &str, v: u64) {
 
 /// `user hello [n]`: a well-behaved program using every system call.
 pub extern "C" fn prog_hello(rounds: usize) -> ! {
-    uwrite("hello from user mode: this text reached the console through a system call (write)\n");
+    uwrite("hello from user mode: this text came through a system call (write)\n");
     uwrite_num("  my pid (getpid):        ", ecall(SYS_GETPID, 0, 0) as u64);
     uwrite_num("  uptime ms (uptime_ms):  ", ecall(SYS_UPTIME_MS, 0, 0) as u64);
     for i in 1..=rounds {
