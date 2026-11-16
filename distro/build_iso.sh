@@ -72,6 +72,9 @@ exec qemu-system-riscv64 -machine virt -cpu rv64 -smp 1 -m 128M -bios default \
 EOF
 chmod 0755 "$R/usr/local/bin/micro-os-kernel"
 
+log "applying the NEXUS theme (login screen, panel, dock, wallpaper)"
+bash "$HERE/theme.sh" "$R"
+
 log "turning it into a live system"
 # The live root is an overlay in RAM: no partitions to mount.
 printf '# Live system: the root is set up by live-boot.\n' > "$R/etc/fstab"
@@ -88,9 +91,9 @@ log "compressing the root file system (squashfs, xz)"
 mksquashfs "$R" "$WORK/iso/live/filesystem.squashfs" -comp xz -e boot/efi -noappend -quiet
 
 cat > "$WORK/iso/boot/grub/grub.cfg" <<'EOF'
-set timeout=5
+set timeout=3
 set default=0
-menuentry "Micro-OS Linux (live desktop)" {
+menuentry "Micro-OS Linux - NEXUS desktop (live)" {
     linux /live/vmlinuz boot=live quiet console=ttyS0,115200 console=tty0
     initrd /live/initrd.img
 }
