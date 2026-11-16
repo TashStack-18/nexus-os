@@ -86,6 +86,9 @@ pub fn init(fb: Option<Framebuffer>, splash: bool) {
     let Some(fb) = fb else { return };
     // Switch to a bigger screen mode if the card allows it.
     let fb = modeset::upgrade(fb);
+    if fb.bpp != 32 {
+        return; // the desktop draws 32-bit pixels; stay on the text console
+    }
     // SAFETY: single-threaded boot; nothing reads FB or FONTS before this.
     unsafe {
         *core::ptr::addr_of_mut!(FB) = Some(fb);
