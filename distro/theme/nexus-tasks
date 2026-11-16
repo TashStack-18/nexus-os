@@ -1,0 +1,449 @@
+#!/usr/bin/env python3
+"""NEXUS Task Manager & System Monitor
+Provides real-time system monitoring, process inspection, resource utilization,
+and task control for NEXUS OS.
+
+Features:
+- Live process list parsed directly from Linux /proc
+- Real CPU%, Memory RSS, PID, User, Nice, and Status
+- Search and filter by name/PID
+- End Task / Kill functionality
+- Real-time System Monitor: CPU gauge, RAM gauge, Swap, Load, Uptime
+- Micro-OS Task Control Block (TCB) inspector and kernel task explanation
+"""
+import os
+import sys
+import time
+import signal
+import threading
+import subprocess
+
+import gi
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+from gi.repository import Gtk, Gdk, GLib, Pango
+
+DARK_CSS = b"""
+window { background-color: #0b1020; color: #e8edf8; font-family: 'DejaVu Sans', sans-serif; }
+notebook > header { background-color: #080c18; border-bottom: 1px solid #1a2542; }
+notebook > header > tabs > tab { padding: 8px 18px; color: #8a9bb8; font-weight: bold; }
+notebook > header > tabs > tab:checked { color: #ffffff; border-bottom: 2px solid #5b8cff; background-color: #12182b; }
+.card { background-color: #12182b; border-radius: 8px; border: 1px solid #1c2744; padding: 12px; }
+treeview { background-color: #0e1424; color: #d0daf0; font-size: 10pt; }
+treeview:selected { background-color: #2b3d6b; color: #ffffff; }
+button { background: #1c2744; color: #e8edf8; border-radius: 6px; border: 1px solid #293860; padding: 5px 12px; font-weight: bold; }
+button:hover { background: #26365e; border-color: #5b8cff; }
+button.danger { background: #bd2130; color: #ffffff; border-color: #dc3545; }
+button.danger:hover { background: #dc3545; }
+button.primary { background: #3366ff; color: #ffffff; border-color: #4d79ff; }
+label.title { font-size: 15pt; font-weight: bold; color: #ffffff; }
+label.section-header { font-size: 11pt; font-weight: bold; color: #5b8cff; }
+label.stat-val { font-size: 14pt; font-weight: bold; color: #ffffff; }
+label.stat-lbl { font-size: 9pt; color: #8a9bb8; }
+progressbar > trough { background-color: #1c2744; border-radius: 4px; }
+progressbar > trough > progress { background-color: #3366ff; border-radius: 4px; }
+"""
+
+def read_cpu_stat():
+    try:
+        with open("/proc/stat") as f:
+            line = f.readline()
+        parts = [float(x) for x in line.split()[1:]]
+        idle = parts[3] + parts[4]
+        total = sum(parts)
+        return total, idle
+    except Exception:
+        return 0, 0
+
+def read_meminfo():
+    res = {}
+    try:
+        with open("/proc/meminfo") as f:
+            for line in f:
+                parts = line.split(":")
+                if len(parts) == 2:
+                    k = parts[0].strip()
+                    v = int(parts[1].split()[0])
+                    res[k] = v
+    except Exception:
+        pass
+    return res
+
+class NexusTaskManager(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="NEXUS Task Manager & System Monitor")
+        self.set_default_size(1080, 720)
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.connect("destroy", self._on_destroy)
+
+        self.running = True
+        self.prev_proc_cpu = {}  # pid -> (cpu_time, timestamp)
+        self.prev_sys_cpu = read_cpu_stat()
+
+        self._setup_style()
+        self._init_ui()
+        self._start_refresh_thread()
+
+    def _setup_style(self):
+        provider = Gtk.CssProvider()
+        provider.load_from_data(DARK_CSS)
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+
+    def _init_ui(self):
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.add(vbox)
+
+        # Header bar
+        header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10, margin=10)
+        header.get_style_context().add_class("card")
+        vbox.pack_start(header, False, False, 0)
+
+        h_icon = Gtk.Label()
+        h_icon.set_markup("<span size='xx-large'>📊</span>")
+        header.pack_start(h_icon, False, False, 4)
+
+        title_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        h_title = Gtk.Label(xalign=0)
+        h_title.set_markup("<b>NEXUS Task Manager</b>")
+        h_title.get_style_context().add_class("title")
+        self.h_sub = Gtk.Label(label="Reading live system metrics...", xalign=0)
+        title_box.pack_start(h_title, False, False, 0)
+        title_box.pack_start(self.h_sub, False, False, 0)
+        header.pack_start(title_box, False, False, 0)
+
+        # Quick stats on right
+        stats_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=16)
+        self.lbl_cpu_quick = Gtk.Label(label="CPU: --%", xalign=1)
+        self.lbl_cpu_quick.get_style_context().add_class("stat-val")
+        self.lbl_mem_quick = Gtk.Label(label="RAM: --%", xalign=1)
+        self.lbl_mem_quick.get_style_context().add_class("stat-val")
+        stats_box.pack_start(self.lbl_cpu_quick, False, False, 0)
+        stats_box.pack_start(self.lbl_mem_quick, False, False, 0)
+        header.pack_end(stats_box, False, False, 10)
+
+        # Notebook tabs
+        self.notebook = Gtk.Notebook()
+        vbox.pack_start(self.notebook, True, True, 0)
+
+        self._build_processes_tab()
+        self._build_performance_tab()
+        self._build_kernel_tasks_tab()
+
+    # =========================================================================
+    # TAB 1: PROCESSES & TASKS
+    # =========================================================================
+    def _build_processes_tab(self):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, margin=10)
+
+        # Toolbar
+        bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        bar.get_style_context().add_class("card")
+        box.pack_start(bar, False, False, 0)
+
+        lbl_s = Gtk.Label(label="Filter:")
+        self.entry_search = Gtk.Entry()
+        self.entry_search.set_placeholder_text("Search by name or PID...")
+        bar.pack_start(lbl_s, False, False, 0)
+        bar.pack_start(self.entry_search, True, True, 0)
+
+        btn_end = Gtk.Button(label="End Selected Task")
+        btn_end.get_style_context().add_class("danger")
+        btn_end.connect("clicked", self._on_end_task)
+        bar.pack_end(btn_end, False, False, 0)
+
+        # TreeView: [PID, Name, Status, CPU %, Memory RSS (MB), Nice, Command]
+        self.proc_store = Gtk.ListStore(int, str, str, str, str, int, str)
+        self.proc_tree = Gtk.TreeView(model=self.proc_store)
+        self.proc_tree.set_rules_hint(True)
+
+        cols = [
+            ("PID", 0, 70), ("Name", 1, 160), ("Status", 2, 90),
+            ("CPU %", 3, 80), ("Memory (MB)", 4, 100), ("Nice", 5, 60), ("Command", 6, 300)
+        ]
+        for title, idx, width in cols:
+            rend = Gtk.CellRendererText()
+            c = Gtk.TreeViewColumn(title, rend, text=idx)
+            c.set_resizable(True)
+            c.set_min_width(width)
+            self.proc_tree.append_column(c)
+
+        sc = Gtk.ScrolledWindow()
+        sc.add(self.proc_tree)
+        box.pack_start(sc, True, True, 0)
+
+        self.notebook.append_page(box, Gtk.Label(label="Processes & Tasks"))
+
+    def _on_end_task(self, _):
+        sel, it = self.proc_tree.get_selection().get_selected()
+        if it:
+            pid = sel.get_value(it, 0)
+            pname = sel.get_value(it, 1)
+            try:
+                os.kill(pid, signal.SIGTERM)
+                dialog = Gtk.MessageDialog(
+                    parent=self, flags=0, message_type=Gtk.MessageType.INFO,
+                    buttons=Gtk.ButtonsType.OK, text=f"Terminated process {pname} (PID {pid})."
+                )
+                dialog.run()
+                dialog.destroy()
+            except Exception as e:
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except Exception as e2:
+                    dialog = Gtk.MessageDialog(
+                        parent=self, flags=0, message_type=Gtk.MessageType.ERROR,
+                        buttons=Gtk.ButtonsType.OK, text=f"Failed to kill PID {pid}: {e2}"
+                    )
+                    dialog.run()
+                    dialog.destroy()
+
+    # =========================================================================
+    # TAB 2: SYSTEM PERFORMANCE
+    # =========================================================================
+    def _build_performance_tab(self):
+        sc = Gtk.ScrolledWindow()
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin=14)
+        sc.add(box)
+
+        # Top Grid: CPU & Memory Cards
+        grid = Gtk.Grid()
+        grid.set_column_spacing(12)
+        grid.set_row_spacing(12)
+        grid.set_column_homogeneous(True)
+        box.pack_start(grid, False, False, 0)
+
+        # CPU Card
+        c_cpu = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        c_cpu.get_style_context().add_class("card")
+        c_cpu_h = Gtk.Label(label="<b>Processor Utilization</b>", use_markup=True, xalign=0)
+        c_cpu_h.get_style_context().add_class("section-header")
+        self.lbl_cpu_detail = Gtk.Label(label="0.0%", xalign=0)
+        self.lbl_cpu_detail.get_style_context().add_class("stat-val")
+        self.prog_cpu = Gtk.ProgressBar()
+        c_cpu.pack_start(c_cpu_h, False, False, 0)
+        c_cpu.pack_start(self.lbl_cpu_detail, False, False, 0)
+        c_cpu.pack_start(self.prog_cpu, False, False, 0)
+        grid.attach(c_cpu, 0, 0, 1, 1)
+
+        # Memory Card
+        c_mem = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        c_mem.get_style_context().add_class("card")
+        c_mem_h = Gtk.Label(label="<b>Memory (RAM) Usage</b>", use_markup=True, xalign=0)
+        c_mem_h.get_style_context().add_class("section-header")
+        self.lbl_mem_detail = Gtk.Label(label="0 MB / 0 MB (0.0%)", xalign=0)
+        self.lbl_mem_detail.get_style_context().add_class("stat-val")
+        self.prog_mem = Gtk.ProgressBar()
+        c_mem.pack_start(c_mem_h, False, False, 0)
+        c_mem.pack_start(self.lbl_mem_detail, False, False, 0)
+        c_mem.pack_start(self.prog_mem, False, False, 0)
+        grid.attach(c_mem, 1, 0, 1, 1)
+
+        # System Details Card
+        c_sys = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        c_sys.get_style_context().add_class("card")
+        c_sys_h = Gtk.Label(label="<b>System Environment & Hardware</b>", use_markup=True, xalign=0)
+        c_sys_h.get_style_context().add_class("section-header")
+        c_sys.pack_start(c_sys_h, False, False, 0)
+
+        self.sys_info_store = Gtk.ListStore(str, str)
+        sys_tree = Gtk.TreeView(model=self.sys_info_store)
+        sys_tree.append_column(Gtk.TreeViewColumn("Property", Gtk.CellRendererText(), text=0))
+        sys_tree.append_column(Gtk.TreeViewColumn("Value", Gtk.CellRendererText(), text=1))
+        c_sys.pack_start(sys_tree, True, True, 0)
+        box.pack_start(c_sys, True, True, 0)
+
+        self.notebook.append_page(sc, Gtk.Label(label="Performance & Resources"))
+
+    # =========================================================================
+    # TAB 3: MICRO-OS KERNEL ARCHITECTURE
+    # =========================================================================
+    def _build_kernel_tasks_tab(self):
+        sc = Gtk.ScrolledWindow()
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14, margin=14)
+        sc.add(box)
+
+        # Overview Card
+        c_top = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        c_top.get_style_context().add_class("card")
+        t_title = Gtk.Label(label="<b>Micro-OS Kernel Task Model (CA-6 Architecture)</b>", use_markup=True, xalign=0)
+        t_title.get_style_context().add_class("section-header")
+        t_desc = Gtk.Label(
+            label="In the Rust Micro-OS kernel, tasks are not heavy POSIX processes. Each task is a lightweight, "
+                  "coroutine-like execution unit with its own allocated stack, task control block (TCB), and scheduling quantum.",
+            xalign=0, wrap=True
+        )
+        c_top.pack_start(t_title, False, False, 0)
+        c_top.pack_start(t_desc, False, False, 0)
+        box.pack_start(c_top, False, False, 0)
+
+        # TCB Fields Table
+        c_tcb = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        c_tcb.get_style_context().add_class("card")
+        tcb_head = Gtk.Label(label="<b>Task Control Block (TCB) Representation</b>", use_markup=True, xalign=0)
+        tcb_head.get_style_context().add_class("section-header")
+        c_tcb.pack_start(tcb_head, False, False, 0)
+
+        tcb_store = Gtk.ListStore(str, str, str)
+        tcb_tree = Gtk.TreeView(model=tcb_store)
+        tcb_tree.append_column(Gtk.TreeViewColumn("Field", Gtk.CellRendererText(), text=0))
+        tcb_tree.append_column(Gtk.TreeViewColumn("Type (Rust)", Gtk.CellRendererText(), text=1))
+        tcb_tree.append_column(Gtk.TreeViewColumn("Description & Function in Scheduling", Gtk.CellRendererText(), text=2))
+
+        tcb_rows = [
+            ("tid", "usize", "Unique Task Identifier (0 = Idle, 1 = Desktop, 2 = Shell, 3+ = Apps)"),
+            ("name", "&'static str", "Task Name identifier (e.g. 'primes', 'fib', 'desktop')"),
+            ("state", "TaskState", "Task lifecycle state: Ready, Running, Blocked, Terminated"),
+            ("priority", "u8", "Static or dynamic priority level (0 = highest, 7 = lowest)"),
+            ("stack", "TaskStack", "16 KiB isolated stack memory with stack-overflow canary words"),
+            ("cpu_ticks", "u64", "Total cumulative PIT timer ticks (ms) the task has consumed"),
+            ("burst_info", "BurstInfo", "Burst estimation model (Oracle or Exponential Moving Average for SJF/SRTF)"),
+            ("waited", "u64", "Elapsed time spent in the READY queue awaiting CPU dispatch"),
+        ]
+        for r in tcb_rows:
+            tcb_store.append(list(r))
+        c_tcb.pack_start(tcb_tree, False, False, 0)
+        box.pack_start(c_tcb, False, False, 0)
+
+        # Launcher Button
+        c_launch = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=10)
+        c_launch.get_style_context().add_class("card")
+        btn_k = Gtk.Button(label="▶ Launch Micro-OS Kernel Interactive Shell")
+        btn_k.get_style_context().add_class("primary")
+        btn_k.connect("clicked", lambda _: subprocess.Popen(["xfce4-terminal", "--title=Micro-OS-Kernel", "-e", "micro-os-kernel"]))
+        c_launch.pack_start(btn_k, False, False, 0)
+        lbl_hint = Gtk.Label(label="Opens the live Rust kernel with console tracing enabled.", xalign=0)
+        c_launch.pack_start(lbl_hint, True, True, 0)
+        box.pack_start(c_launch, False, False, 0)
+
+        self.notebook.append_page(sc, Gtk.Label(label="Kernel Tasks & TCB"))
+
+    # =========================================================================
+    # REFRESH THREAD
+    # =========================================================================
+    def _start_refresh_thread(self):
+        def worker():
+            while self.running:
+                # 1. System stats
+                tot, idle = read_cpu_stat()
+                prev_tot, prev_idle = self.prev_sys_cpu
+                diff_tot = max(1.0, tot - prev_tot)
+                diff_idle = idle - prev_idle
+                cpu_pct = max(0.0, min(100.0, ((diff_tot - diff_idle) / diff_tot) * 100.0))
+                self.prev_sys_cpu = (tot, idle)
+
+                mem = read_meminfo()
+                tot_mem = mem.get("MemTotal", 1024)
+                avail_mem = mem.get("MemAvailable", tot_mem)
+                used_mem = tot_mem - avail_mem
+                mem_pct = (used_mem / max(1.0, tot_mem)) * 100.0
+
+                # 2. Process list
+                search_query = self.entry_search.get_text().strip().lower()
+                procs = []
+                now = time.monotonic()
+
+                try:
+                    pids = [int(p) for p in os.listdir("/proc") if p.isdigit()]
+                except Exception:
+                    pids = []
+
+                for pid in pids:
+                    try:
+                        stat_path = f"/proc/{pid}/stat"
+                        with open(stat_path) as f:
+                            content = f.read()
+                        rparen = content.rfind(")")
+                        name = content[content.find("(") + 1:rparen]
+                        rest = content[rparen + 2:].split()
+                        state_code = rest[0]
+                        nice = int(rest[16])
+                        utime = int(rest[11])
+                        stime = int(rest[12])
+                        rss_pages = int(rest[21])
+                        rss_mb = (rss_pages * 4096) / (1024 * 1024)
+
+                        state_map = {"R": "Running", "S": "Sleeping", "D": "Disk Sleep", "Z": "Zombie", "T": "Stopped"}
+                        state_str = state_map.get(state_code, state_code)
+
+                        # CPU %
+                        total_proc_time = utime + stime
+                        proc_cpu_pct = 0.0
+                        if pid in self.prev_proc_cpu:
+                            prev_t, prev_time = self.prev_proc_cpu[pid]
+                            dt = now - prev_time
+                            if dt > 0.0:
+                                proc_cpu_pct = max(0.0, ((total_proc_time - prev_t) / 100.0) / dt * 100.0)
+                        self.prev_proc_cpu[pid] = (total_proc_time, now)
+
+                        cmd_path = f"/proc/{pid}/cmdline"
+                        try:
+                            with open(cmd_path, "rb") as f:
+                                cmd = f.read().replace(b"\0", b" ").decode("utf-8", "ignore").strip()
+                        except Exception:
+                            cmd = name
+
+                        if not cmd:
+                            cmd = f"[{name}]"
+
+                        if not search_query or (search_query in name.lower() or search_query in str(pid)):
+                            procs.append((pid, name, state_str, f"{proc_cpu_pct:.1f}%", f"{rss_mb:.1f}", nice, cmd))
+
+                    except Exception:
+                        continue
+
+                # Sort by CPU% or Memory
+                procs.sort(key=lambda x: float(x[4]), reverse=True)
+
+                def update_gui(c_pct=cpu_pct, m_pct=mem_pct, u_m=used_mem, t_m=tot_mem, p_list=procs):
+                    self.lbl_cpu_quick.set_text(f"CPU: {c_pct:.1f}%")
+                    self.lbl_mem_quick.set_text(f"RAM: {m_pct:.1f}%")
+                    self.h_sub.set_text(f"{len(p_list)} tasks active | Memory: {u_m // 1024} MB in use")
+
+                    self.prog_cpu.set_fraction(c_pct / 100.0)
+                    self.lbl_cpu_detail.set_text(f"{c_pct:.1f}%")
+
+                    self.prog_mem.set_fraction(m_pct / 100.0)
+                    self.lbl_mem_detail.set_text(f"{u_m // 1024} MB / {t_m // 1024} MB ({m_pct:.1f}%)")
+
+                    # Update system info tree
+                    self.sys_info_store.clear()
+                    uname = os.uname()
+                    with open("/proc/uptime") as f:
+                        up_secs = float(f.read().split()[0])
+                    up_str = f"{int(up_secs // 3600)}h {int((up_secs % 3600) // 60)}m {int(up_secs % 60)}s"
+
+                    sys_props = [
+                        ("Operating System", "NEXUS OS (Debian 13 + Rust Micro-OS)"),
+                        ("Kernel Release", f"{uname.sysname} {uname.release}"),
+                        ("Hardware Architecture", uname.machine),
+                        ("System Uptime", up_str),
+                        ("Total Physical RAM", f"{t_m // 1024} MB"),
+                        ("Available RAM", f"{mem.get('MemAvailable', 0) // 1024} MB"),
+                        ("Swap Total / Free", f"{mem.get('SwapTotal', 0) // 1024} MB / {mem.get('SwapFree', 0) // 1024} MB"),
+                    ]
+                    for prop in sys_props:
+                        self.sys_info_store.append(list(prop))
+
+                    # Update process list
+                    self.proc_store.clear()
+                    for p in p_list[:120]:
+                        self.proc_store.append(list(p))
+
+                GLib.idle_add(update_gui)
+                time.sleep(1.5)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_destroy(self, _):
+        self.running = False
+        Gtk.main_quit()
+
+def main():
+    win = NexusTaskManager()
+    win.show_all()
+    Gtk.main()
+
+if __name__ == "__main__":
+    main()

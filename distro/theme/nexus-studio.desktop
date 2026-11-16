@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Rust Development Studio
+Comment=Develop, compile, and execute Rust projects
+Exec=nexus-studio
+Icon=applications-development
+Categories=Development;IDE;
+Terminal=false
+StartupNotify=true
