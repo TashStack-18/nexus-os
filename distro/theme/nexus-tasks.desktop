@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Task Manager & System Monitor
+Comment=Monitor processes, system resources, and CPU scheduling
+Exec=nexus-tasks
+Icon=utilities-system-monitor
+Categories=System;Monitor;
+Terminal=false
+StartupNotify=true

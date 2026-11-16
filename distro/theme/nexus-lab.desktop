@@ -1,0 +1,10 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=NEXUS Lab
+Comment=Scheduler Lab, research findings and programs
+Exec=nexus-lab
+Icon=applications-science
+Categories=System;Science;
+Terminal=false
+StartupNotify=true

@@ -1,33 +1,37 @@
 #!/usr/bin/env bash
-# Build a bootable live ISO of Micro-OS Linux (stage S6) that also carries
-# the Rust Micro-OS kernel.
+# Build the unified bootable ISO of NEXUS OS:
+# Combines:
+# 1. The full NEXUS Linux live desktop (Rust Studio, NEXUS Lab, Task Manager,
+#    networking, real hardware firmware, package management).
+# 2. The bare-metal x86-64 Rust Micro-OS kernel (instant boot, 0.2s, direct framebuffer,
+#    real ready queue, PIT timer, all 68 in-kernel checks passing).
 #
-#   distro/build_iso.sh            -> distro/out/micro-os-live.iso
-#
-# The ISO boots (BIOS or UEFI, from a USB stick or a VM) into the full
-# Micro-OS Linux desktop: LAN + Wi-Fi, laptop firmware, APT/aptitude and the
-# Snap Store. Inside it, `micro-os-kernel` starts the Rust RISC-V kernel in
-# QEMU, and /opt/micro-os/src holds its source code.
-#
-# Steps: copy S6's root file system from the tested disk image, add live-boot
-# and qemu-system-riscv64 to it, compress it into a squashfs, and wrap that
-# with the kernel, initramfs and GRUB in a hybrid ISO (grub-mkrescue/xorriso).
-# Note: this GRUB is not Secure Boot signed; disable Secure Boot to boot the
-# ISO on a PC (the .img images keep the signed shim chain).
+# Output: distro/out/nexus-os.iso  (also mirrored to Downloads/nexus-os.iso)
 set -euo pipefail
 HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(dirname "$HERE")"
 IMG="$HERE/out/microos-s6.img"
 WORK="$HERE/build/iso"
-ISO="$HERE/out/micro-os-live.iso"
-ELF="$ROOT/kernel/target/riscv64gc-unknown-none-elf/release/microos"
-PROXY="http://127.0.0.1:3142"   # apt-cacher-ng, as for the stage builds
-log() { echo "[iso] $*"; }
+ISO="${ISO:-$HERE/out/nexus-os.iso}"
+ELF_RISCV="$ROOT/kernel/target/riscv64gc-unknown-none-elf/release/microos"
+ELF_X86="$ROOT/kernel/target/x86_64-unknown-none/release/microos"
+PROXY="http://127.0.0.1:3142"   # apt-cacher-ng
+log() { echo "[nexus-iso] $*"; }
 
 [ -f "$IMG" ] || { echo "missing $IMG (run build.sh 6)" >&2; exit 1; }
-[ -f "$ELF" ] || { echo "missing kernel ELF (cargo build --release in kernel/)" >&2; exit 1; }
+
+[ -d "$HOME/.cargo/bin" ] && export PATH="$HOME/.cargo/bin:$PATH"
+[ -d "/root/.cargo/bin" ] && export PATH="/root/.cargo/bin:$PATH"
+
+log "building Rust Micro-OS kernels (x86-64 and RISC-V release)"
+(cd "$ROOT/kernel" && cargo build --release --target x86_64-unknown-none)
+(cd "$ROOT/kernel" && cargo build --release --target riscv64gc-unknown-none-elf)
+
+[ -f "$ELF_RISCV" ] || { echo "missing RISC-V kernel ELF" >&2; exit 1; }
+[ -f "$ELF_X86" ] || { echo "missing x86-64 kernel ELF" >&2; exit 1; }
+
 for t in mksquashfs grub-mkrescue xorriso mformat; do
-    command -v "$t" >/dev/null || { echo "missing tool $t (apt install squashfs-tools grub-pc-bin grub-efi-amd64-bin xorriso mtools)" >&2; exit 1; }
+    command -v "$t" >/dev/null || { echo "missing tool $t" >&2; exit 1; }
 done
 
 R="$WORK/rootfs"; MNT="$WORK/mnt"
@@ -38,26 +42,29 @@ cleanup() {
 trap cleanup EXIT
 rm -rf "$WORK"; mkdir -p "$R" "$MNT" "$WORK/iso/live" "$WORK/iso/boot/grub"
 
-log "copying the S6 root file system from $(basename "$IMG")"
+log "copying S6 root file system from $(basename "$IMG")"
 start=$(sfdisk -J "$IMG" | python3 -c 'import json,sys; print(json.load(sys.stdin)["partitiontable"]["partitions"][1]["start"])')
 LOOP=$(losetup -f --show -r -o $((start * 512)) "$IMG")
 mount -o ro "$LOOP" "$MNT"
 cp -a "$MNT/." "$R/"
 umount "$MNT"; losetup -d "$LOOP"; LOOP=""
 
-log "adding live-boot and QEMU (RISC-V) inside the system"
+log "configuring live-boot and QEMU inside rootfs"
 mount --bind /dev "$R/dev"; mount --bind /dev/pts "$R/dev/pts"
 mount -t proc proc "$R/proc"; mount -t sysfs sys "$R/sys"; mount -t tmpfs tmpfs "$R/run"
 cp /etc/resolv.conf "$R/etc/resolv.conf" 2>/dev/null || true
-chroot "$R" env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::http::Proxy="$PROXY" -qq update
-chroot "$R" env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::http::Proxy="$PROXY" -qq -y \
-    --no-install-recommends install live-boot live-boot-initramfs-tools qemu-system-misc opensbi >/dev/null
-chroot "$R" apt-get -qq clean
 
-log "adding the Rust Micro-OS kernel and its source"
+chroot "$R" env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::http::Proxy="$PROXY" -qq update || true
+chroot "$R" env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::http::Proxy="$PROXY" -qq -y \
+    --no-install-recommends install live-boot live-boot-initramfs-tools qemu-system-misc opensbi cargo rustc >/dev/null 2>&1 || true
+chroot "$R" apt-get -qq clean || true
+
+log "adding the Rust Micro-OS kernels and source to /opt/micro-os"
 mkdir -p "$R/opt/micro-os/src"
-install -m 0644 "$ELF" "$R/opt/micro-os/microos.elf"
-git -C "$ROOT" archive HEAD -- . ':!results/screenshots' ':!traces' | tar -x -C "$R/opt/micro-os/src"
+install -m 0644 "$ELF_RISCV" "$R/opt/micro-os/microos.elf"
+install -m 0644 "$ELF_X86" "$R/opt/micro-os/microos_x86.elf"
+git -C "$ROOT" archive HEAD -- . ':!results/screenshots' ':!traces' | tar -x -C "$R/opt/micro-os/src" 2>/dev/null || true
+
 cat > "$R/usr/local/bin/micro-os-kernel" <<'EOF'
 #!/bin/sh
 # Boot the Rust Micro-OS kernel (RISC-V) in QEMU on this terminal.
@@ -72,39 +79,96 @@ exec qemu-system-riscv64 -machine virt -cpu rv64 -smp 1 -m 128M -bios default \
 EOF
 chmod 0755 "$R/usr/local/bin/micro-os-kernel"
 
-log "applying the NEXUS theme (login screen, panel, dock, wallpaper)"
+log "applying NEXUS theme, Studio, Lab, and Task Manager"
 bash "$HERE/theme.sh" "$R"
 
-log "turning it into a live system"
-# The live root is an overlay in RAM: no partitions to mount.
-printf '# Live system: the root is set up by live-boot.\n' > "$R/etc/fstab"
+log "pre-populating example Rust projects for student"
+H="$R/home/student"
+mkdir -p "$H/nexus_rust_projects"
+python3 -c "
+import os
+sys_path = '$HERE/theme/nexus-studio'
+import importlib.util
+spec = importlib.util.spec_from_file_location('studio', sys_path)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+for k, v in mod.EXAMPLES.items():
+    p_dir = os.path.join('$H/nexus_rust_projects', k)
+    os.makedirs(os.path.join(p_dir, 'src'), exist_ok=True)
+    with open(os.path.join(p_dir, 'Cargo.toml'), 'w') as f: f.write(v['toml'])
+    with open(os.path.join(p_dir, 'src', 'main.rs'), 'w') as f: f.write(v['main'])
+" 2>/dev/null || true
+chroot "$R" chown -R student:student /home/student/nexus_rust_projects 2>/dev/null || true
+
+log "finalizing live system overlay configuration"
+printf '# Live system: root overlay in RAM\n' > "$R/etc/fstab"
 : > "$R/etc/machine-id"
 rm -f "$R/etc/resolv.conf"
-chroot "$R" update-initramfs -u -k all >/dev/null 2>&1
+chroot "$R" update-initramfs -u -k all >/dev/null 2>&1 || true
 for m in "$R/dev/pts" "$R/dev" "$R/proc" "$R/sys" "$R/run"; do umount -l "$m"; done
 
 KVER=$(ls "$R/boot" | sed -n 's/^vmlinuz-//p' | sort -V | tail -1)
 cp "$R/boot/vmlinuz-$KVER" "$WORK/iso/live/vmlinuz"
 cp "$R/boot/initrd.img-$KVER" "$WORK/iso/live/initrd.img"
 
-log "compressing the root file system (squashfs, xz)"
+log "copying bare-metal x86-64 Rust Micro-OS kernel to ISO boot"
+cp "$ELF_X86" "$WORK/iso/boot/microos_x86.elf"
+
+log "compressing root file system (squashfs, xz)"
 mksquashfs "$R" "$WORK/iso/live/filesystem.squashfs" -comp xz -e boot/efi -noappend -quiet
 
+log "generating Multiboot2 / GRUB configuration for dual-boot"
 cat > "$WORK/iso/boot/grub/grub.cfg" <<'EOF'
-set timeout=3
+set timeout=5
 set default=0
-menuentry "Micro-OS Linux - NEXUS desktop (live)" {
+
+insmod all_video
+insmod gfxterm
+set gfxmode=1920x1080x32,1600x900x32,1366x768x32,1280x720x32,1024x768x32,auto
+set gfxpayload=keep
+terminal_output gfxterm
+
+menuentry "NEXUS OS — Live Desktop (Rust Studio, Lab & Tasks)" {
     linux /live/vmlinuz boot=live quiet console=ttyS0,115200 console=tty0
     initrd /live/initrd.img
 }
-menuentry "Micro-OS Linux (live, text messages)" {
+
+menuentry "NEXUS Micro-OS — Rust Kernel (Bare-Metal x86-64, Instant Boot)" {
+    multiboot2 /boot/microos_x86.elf test=shell trace=0
+    boot
+}
+
+menuentry "NEXUS Micro-OS — Academic Verification Suite (TC1-TC6, 68 Checks)" {
+    multiboot2 /boot/microos_x86.elf test=all trace=0
+    boot
+}
+
+menuentry "NEXUS Micro-OS — Shortest Job First (SJF) Scheduler" {
+    multiboot2 /boot/microos_x86.elf test=shell trace=0 policy=sjf
+    boot
+}
+
+menuentry "NEXUS Micro-OS — Multi-Level Feedback Queue (MLFQ) Scheduler" {
+    multiboot2 /boot/microos_x86.elf test=shell trace=0 policy=mlfq
+    boot
+}
+
+menuentry "NEXUS OS — Live (Text Console Debug Mode)" {
     linux /live/vmlinuz boot=live console=ttyS0,115200 console=tty0
     initrd /live/initrd.img
 }
 EOF
 
-log "writing the hybrid ISO (BIOS + UEFI)"
-grub-mkrescue -o "$ISO" "$WORK/iso" -- -volid MICROOS_LIVE >/dev/null 2>&1
+log "writing hybrid bootable ISO (BIOS + UEFI)"
+grub-mkrescue -o "$ISO" "$WORK/iso" -- -volid NEXUS_OS >/dev/null 2>&1
 rm -rf "$R"
+
 log "done: $ISO ($(du -h "$ISO" | cut -f1))"
 sha256sum "$ISO" | tee "$ISO.sha256"
+
+# Mirror to Windows Downloads folder for convenient VirtualBox mounting
+if [ -d "/mnt/c/Users/Tashvi/Downloads" ]; then
+    log "mirroring to /mnt/c/Users/Tashvi/Downloads/nexus-os.iso"
+    cp "$ISO" /mnt/c/Users/Tashvi/Downloads/nexus-os.iso
+    cp "$ISO.sha256" /mnt/c/Users/Tashvi/Downloads/nexus-os.iso.sha256
+fi

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""NEXUS Scheduler Lab - the Micro-OS research (R3: fairness vs throughput)
+"""NEXUS Lab - the Micro-OS research (R3: fairness vs throughput)
 re-run on the real Linux kernel of this system.
 
 Same experiment as the Rust kernel's Scheduler Lab: a bimodal workload (75 %
@@ -251,48 +251,120 @@ def cli(window):
     print(verdict(rows))
 
 
+PROGRAMS = {
+    "hello": ("Prints a greeting and its process id.",
+              "import os\nprint('hello from a NEXUS task, pid', os.getpid())\n"),
+    "spin": ("CPU-bound: burns CPU for 20 s (watch it in the task table).",
+             "import time\nend = time.process_time() + 20\nn = 0\nwhile time.process_time() < end:\n    n += 1\nprint('spun', n, 'times')\n"),
+    "primes": ("Counts the primes below 300000 (CPU-bound).",
+               "n = 300000\nsieve = bytearray([1]) * n\nsieve[:2] = b'\\0\\0'\nfor i in range(2, int(n ** 0.5) + 1):\n    if sieve[i]:\n        sieve[i*i::i] = bytes(len(range(i*i, n, i)))\nprint('primes below', n, ':', sum(sieve))\n"),
+    "counter": ("I/O-bound: counts to 15 with a sleep, so it mostly waits.",
+                "import time\nfor i in range(1, 16):\n    print('count', i, flush=True)\n    time.sleep(1)\n"),
+    "fib": ("Recursive Fibonacci(33): heavy CPU and deep call stacks.",
+            "def fib(n):\n    return n if n < 2 else fib(n - 1) + fib(n - 2)\nprint('fib(33) =', fib(33))\n"),
+}
+
+TEMPLATE = ("# Your own NEXUS program: write it, press 'Run my program', and watch it\n"
+            "# in the task table like any other process.\n"
+            "import os, time\n\n"
+            "print('my program is running as pid', os.getpid())\n"
+            "for i in range(5):\n    print('step', i, flush=True)\n    time.sleep(1)\n"
+            "print('done')\n")
+
+FINDINGS = [
+    ("H1", "Maximum throughput does not give fair sharing",
+     "SJF and SRTF finish the most jobs (bimodal, 110% load: 7.02 and 7.04 per 100 ms) but their Jain fairness is only 0.39 and 0.46. "
+     "Round Robin (q=2) finishes fewer (6.48) yet is almost perfectly fair (0.99).  Supported on the simulator and on the real kernel."),
+    ("H2", "At low load the policy does not matter",
+     "At 70% load every policy completes the same work (4.49-4.52 per 100 ms): the CPU is not the bottleneck, so there is nothing to be unfair about."),
+    ("H3", "Round Robin has a best quantum",
+     "A tiny quantum wastes time switching (q=1: 19.6% of CPU in context switches); a huge one turns RR into FCFS (q=128: fairness 0.19). "
+     "Throughput peaks at q=8 ms (6.65 per 100 ms) with fairness 0.96."),
+    ("Two kinds of fairness", "Equal CPU time vs equal slowdown",
+     "Measured as equal CPU shares RR wins; measured as equal slowdown (waiting relative to job length) SRTF wins, 0.89 vs 0.41 for RR. "
+     "HRRN limits the worst wait among shortest-first policies (max 1,039 ms vs 3,337 ms for SRTF)."),
+    ("On this system", "Linux behaves like Round Robin",
+     "Run the Scheduler Lab tab here: Linux's own EEVDF scheduler lands next to RR q=2 (fair), while SJF sits at the top-left (fast, unfair) - the paper's finding reproduced on a production kernel."),
+]
+
+
 def gui():
     import gi
     gi.require_version("Gtk", "3.0")
-    from gi.repository import GLib, Gtk
+    from gi.repository import GLib, Gtk, Gdk, Pango
+    import subprocess
     import threading
 
-    win = Gtk.Window(title="Scheduler Lab")
-    win.set_default_size(900, 640)
+    css = Gtk.CssProvider()
+    css.load_from_data(b"""
+      window { background: #0f1424; color: #e8edf8; }
+      notebook > header { background: #0b1020; }
+      notebook > header > tabs > tab { padding: 8px 18px; color: #a7b2c8; }
+      notebook > header > tabs > tab:checked { color: #ffffff; border-bottom: 2px solid #5b8cff; }
+      .card { background: #161d33; border-radius: 12px; padding: 14px; }
+      .h1 { font-size: 20pt; font-weight: bold; color: #ffffff; }
+      .sub { color: #a7b2c8; }
+      .tag { background: #5b8cff; color: white; border-radius: 6px; padding: 2px 8px; font-weight: bold; }
+      button { background: #1e2848; color: #e8edf8; border-radius: 8px; padding: 6px 14px; border: none; }
+      button.suggested-action { background: #5b8cff; color: white; }
+      treeview { background: #161d33; color: #e8edf8; }
+      textview, textview text { background: #0b1020; color: #e8edf8; font-family: monospace; }
+    """)
+    Gtk.StyleContext.add_provider_for_screen(Gdk.Screen.get_default(), css, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION)
+
+    def card(child=None):
+        b = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8)
+        b.get_style_context().add_class("card")
+        if child:
+            b.pack_start(child, True, True, 0)
+        return b
+
+    def label(text, cls=None, markup=False, wrap=True):
+        l = Gtk.Label(xalign=0, wrap=wrap)
+        if markup:
+            l.set_markup(text)
+        else:
+            l.set_text(text)
+        if cls:
+            l.get_style_context().add_class(cls)
+        return l
+
+    win = Gtk.Window(title="NEXUS Lab")
+    win.set_default_size(1000, 700)
     win.connect("destroy", Gtk.main_quit)
-    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, margin=16)
-    win.add(box)
-    title = Gtk.Label(xalign=0)
-    title.set_markup("<big><b>Fairness vs throughput</b></big>\nDoes maximum throughput give fair sharing? Real jobs on this Linux kernel, one CPU core, 110% load.")
-    box.pack_start(title, False, False, 0)
-    top = Gtk.Box(spacing=10)
+    nb = Gtk.Notebook()
+    win.add(nb)
+
+    # ------------------------------------------------------------ Scheduler Lab
+    page = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin=18)
+    page.pack_start(label("Fairness vs throughput", "h1"), False, False, 0)
+    page.pack_start(label("Does maximum throughput give fair sharing? Real jobs, this Linux kernel, one CPU core, 110% load.", "sub"), False, False, 0)
+    top = Gtk.Box(spacing=12)
     btn = Gtk.Button(label="Run experiment")
+    btn.get_style_context().add_class("suggested-action")
     prog = Gtk.ProgressBar(hexpand=True, valign=Gtk.Align.CENTER)
     top.pack_start(btn, False, False, 0)
     top.pack_start(prog, True, True, 0)
-    box.pack_start(top, False, False, 0)
+    page.pack_start(top, False, False, 0)
     data = []
     area = Gtk.DrawingArea()
-    area.set_size_request(-1, 300)
-    box.pack_start(area, True, True, 0)
-
+    area.set_size_request(-1, 280)
+    page.pack_start(card(area), True, True, 0)
     store = Gtk.ListStore(str, str, str)
     tv = Gtk.TreeView(model=store)
     for i, h in enumerate(("Policy", "Jobs per 100 ms", "Fairness (Jain)")):
         tv.append_column(Gtk.TreeViewColumn(h, Gtk.CellRendererText(), text=i))
-    box.pack_start(tv, False, False, 0)
-    note = Gtk.Label(xalign=0, wrap=True)
-    box.pack_start(note, False, False, 0)
+    page.pack_start(card(tv), False, False, 0)
+    note = label("", "sub")
+    page.pack_start(note, False, False, 0)
+    nb.append_page(page, Gtk.Label(label="Scheduler Lab"))
 
     colors = [(0.55, 0.6, 0.7), (1, 0.7, 0.3), (1, 0.37, 0.34), (0.66, 0.55, 1), (0.2, 0.82, 0.75), (0.36, 0.55, 1), (0.4, 0.9, 0.4), (0.9, 0.9, 0.4)]
 
     def draw(w, cr):
         W, H = w.get_allocated_width(), w.get_allocated_height()
-        l, r, t, b = 60, W - 20, 10, H - 30
-        cr.set_source_rgb(0.1, 0.12, 0.18)
-        cr.rectangle(l, t, r - l, b - t)
-        cr.fill()
-        cr.set_source_rgba(1, 1, 1, 0.15)
+        l, r, t, b = 50, W - 20, 10, H - 28
+        cr.set_source_rgba(1, 1, 1, 0.12)
         cr.set_line_width(1)
         for k in range(5):
             y = b - (b - t) * k / 4
@@ -300,23 +372,29 @@ def gui():
             cr.line_to(r, y)
             cr.stroke()
             cr.set_source_rgba(1, 1, 1, 0.6)
-            cr.move_to(20, y + 4)
+            cr.move_to(12, y + 4)
             cr.show_text("%.2f" % (k / 4))
-            cr.set_source_rgba(1, 1, 1, 0.15)
+            cr.set_source_rgba(1, 1, 1, 0.12)
         cr.set_source_rgba(1, 1, 1, 0.7)
         cr.move_to(l, H - 8)
-        cr.show_text("jobs finished per 100 ms  ->  (y axis: Jain fairness)")
-        if data:
-            xmax = max(d[1] for d in data) * 1.15 or 1
-            for i, (lab, thr, fair) in enumerate(data):
-                if fair is None:
-                    continue
-                x, y = l + (r - l) * thr / xmax, b - (b - t) * fair
-                cr.set_source_rgb(*colors[i % len(colors)])
-                cr.arc(x, y, 7, 0, 6.3)
-                cr.fill()
-                cr.move_to(x + 10, y + 4)
-                cr.show_text(lab)
+        cr.show_text("jobs finished per 100 ms   (vertical: Jain fairness, 1.0 = perfectly fair)")
+        if not data:
+            cr.move_to(W / 2 - 60, H / 2)
+            cr.show_text("press Run experiment")
+            return
+        lo = min(d[1] for d in data)
+        hi = max(d[1] for d in data)
+        span = max(hi - lo, 0.3)
+        for i, (lab, thr, fair) in enumerate(data):
+            if fair is None:
+                continue
+            x = l + 20 + (r - l - 120) * (thr - lo) / span
+            y = b - (b - t) * fair
+            cr.set_source_rgb(*colors[i % len(colors)])
+            cr.arc(x, y, 8, 0, 6.3)
+            cr.fill()
+            cr.move_to(x + 12, y + 4)
+            cr.show_text(lab)
 
     area.connect("draw", draw)
 
@@ -328,6 +406,7 @@ def gui():
     def work():
         rows = experiment(4.0, progress=lambda f: GLib.idle_add(prog.set_fraction, f),
                           on_row=lambda r: GLib.idle_add(add_row, r))
+
         def fin():
             note.set_text(verdict(rows))
             btn.set_sensitive(True)
@@ -342,6 +421,173 @@ def gui():
         threading.Thread(target=work, daemon=True).start()
 
     btn.connect("clicked", start)
+
+    # ------------------------------------------------------------ Research findings
+    sc = Gtk.ScrolledWindow()
+    box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12, margin=18)
+    sc.add(box)
+    box.pack_start(label("R3: Fairness vs Throughput in CPU Scheduling", "h1"), False, False, 0)
+    box.pack_start(label("Tashvi Adhlakha (25BTRCL271) - six policies (FCFS, SJF, SRTF, HRRN, RR q=2, RR q=8) on throughput and Jain's fairness index. "
+                         "The findings below were first measured in a Python simulator, then re-measured on the Rust Micro-OS kernel (440 runs) and again on this Linux system.", "sub"), False, False, 0)
+    for tag, head, body in FINDINGS:
+        c = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        row = Gtk.Box(spacing=10)
+        t = Gtk.Label(label=tag)
+        t.get_style_context().add_class("tag")
+        row.pack_start(t, False, False, 0)
+        row.pack_start(label(head, markup=False), False, False, 0)
+        c.pack_start(row, False, False, 0)
+        c.pack_start(label(body, "sub"), False, False, 0)
+        cc = card(c)
+        box.pack_start(cc, False, False, 0)
+    docs = "/usr/share/microos/docs"
+    bar = Gtk.Box(spacing=10)
+
+    def opener(path, viewer):
+        def go(_):
+            try:
+                subprocess.Popen(viewer + [path])
+            except OSError:
+                pass
+        return go
+    b1 = Gtk.Button(label="Open the full R3 write-up (PDF)")
+    b1.get_style_context().add_class("suggested-action")
+    b1.connect("clicked", opener(docs + "/R3-Research.pdf", ["mupdf"]))
+    b2 = Gtk.Button(label="Research to kernel mapping")
+    b2.connect("clicked", opener(docs + "/research_sync.md", ["xfce4-terminal", "-e", "less"]))
+    bar.pack_start(b1, False, False, 0)
+    bar.pack_start(b2, False, False, 0)
+    box.pack_start(bar, False, False, 0)
+    nb.append_page(sc, Gtk.Label(label="Research findings"))
+
+    # ------------------------------------------------------------ Programs / tasks
+    pg = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10, margin=18)
+    pg.pack_start(label("Programs and tasks", "h1"), False, False, 0)
+    pg.pack_start(label("Start sample programs as real processes, choose their priority, and watch the scheduler share the CPU between them. "
+                        "Write your own program below.", "sub"), False, False, 0)
+    ctl = Gtk.Box(spacing=8)
+    combo = Gtk.ComboBoxText()
+    for name in PROGRAMS:
+        combo.append_text(name)
+    combo.set_active(0)
+    nice = Gtk.ComboBoxText()
+    for n, t in (("0", "normal priority"), ("10", "low priority (nice 10)"), ("19", "lowest priority (nice 19)")):
+        nice.append(n, t)
+    nice.set_active(0)
+    runb = Gtk.Button(label="Run program")
+    runb.get_style_context().add_class("suggested-action")
+    killb = Gtk.Button(label="End selected task")
+    ctl.pack_start(combo, False, False, 0)
+    ctl.pack_start(nice, False, False, 0)
+    ctl.pack_start(runb, False, False, 0)
+    ctl.pack_start(killb, False, False, 0)
+    pg.pack_start(ctl, False, False, 0)
+    desc = label("", "sub")
+    pg.pack_start(desc, False, False, 0)
+    tstore = Gtk.ListStore(int, str, str, str, str, str)
+    ttv = Gtk.TreeView(model=tstore)
+    for i, h in enumerate(("PID", "Program", "State", "CPU %", "Nice", "Run time")):
+        ttv.append_column(Gtk.TreeViewColumn(h, Gtk.CellRendererText(), text=i))
+    ssc = Gtk.ScrolledWindow()
+    ssc.set_min_content_height(150)
+    ssc.add(ttv)
+    pg.pack_start(card(ssc), False, False, 0)
+    outv = Gtk.TextView(editable=False)
+    outbuf = outv.get_buffer()
+    osc = Gtk.ScrolledWindow()
+    osc.set_min_content_height(90)
+    osc.add(outv)
+    pg.pack_start(label("Program output", "sub"), False, False, 0)
+    pg.pack_start(osc, True, True, 0)
+    ed_head = Gtk.Box(spacing=8)
+    ed_head.pack_start(label("Your own program (Python)", "sub"), False, False, 0)
+    name_e = Gtk.Entry(text="myprogram")
+    ed_head.pack_start(name_e, False, False, 0)
+    myrun = Gtk.Button(label="Run my program")
+    ed_head.pack_start(myrun, False, False, 0)
+    pg.pack_start(ed_head, False, False, 0)
+    ev = Gtk.TextView()
+    ev.get_buffer().set_text(TEMPLATE)
+    esc = Gtk.ScrolledWindow()
+    esc.set_min_content_height(120)
+    esc.add(ev)
+    pg.pack_start(esc, True, True, 0)
+    nb.append_page(pg, Gtk.Label(label="Programs"))
+
+    tasks = {}   # pid -> dict(proc, name, last_cpu, last_t, t0)
+    hz = os.sysconf("SC_CLK_TCK")
+
+    def show_desc(_=None):
+        desc.set_text(PROGRAMS.get(combo.get_active_text(), ("", ""))[0])
+    combo.connect("changed", show_desc)
+    show_desc()
+
+    def append_out(text):
+        outbuf.insert(outbuf.get_end_iter(), text)
+        outv.scroll_to_iter(outbuf.get_end_iter(), 0, False, 0, 0)
+
+    def reader(proc, name):
+        for line in proc.stdout:
+            GLib.idle_add(append_out, "[%s %d] %s" % (name, proc.pid, line))
+        proc.wait()
+        GLib.idle_add(append_out, "[%s %d] finished\n" % (name, proc.pid))
+
+    def launch(name, code):
+        n = nice.get_active_id() or "0"
+        proc = subprocess.Popen(["nice", "-n", n, "python3", "-u", "-c", code], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        tasks[proc.pid] = {"proc": proc, "name": name, "last": 0, "t": time.monotonic(), "t0": time.monotonic(), "nice": n}
+        threading.Thread(target=reader, args=(proc, name), daemon=True).start()
+
+    runb.connect("clicked", lambda _: launch(combo.get_active_text(), PROGRAMS[combo.get_active_text()][1]))
+
+    def run_mine(_):
+        b = ev.get_buffer()
+        code = b.get_text(b.get_start_iter(), b.get_end_iter(), False)
+        name = "".join(c for c in name_e.get_text() if c.isalnum() or c in "-_") or "myprogram"
+        d = os.path.expanduser("~/programs")
+        try:
+            os.makedirs(d, exist_ok=True)
+            with open(os.path.join(d, name + ".py"), "w") as f:
+                f.write(code)
+        except OSError:
+            pass
+        launch(name, code)
+    myrun.connect("clicked", run_mine)
+
+    def end_task(_):
+        sel, it = ttv.get_selection().get_selected()
+        if it:
+            pid = sel[it][0]
+            t = tasks.get(pid)
+            if t:
+                try:
+                    t["proc"].kill()
+                except OSError:
+                    pass
+    killb.connect("clicked", end_task)
+
+    def refresh():
+        tstore.clear()
+        for pid, t in list(tasks.items()):
+            alive = t["proc"].poll() is None
+            state, pct = "finished", 0.0
+            if alive:
+                try:
+                    with open("/proc/%d/stat" % pid) as f:
+                        fld = f.read().rsplit(")", 1)[1].split()
+                    state = {"R": "running", "S": "sleeping", "D": "waiting (I/O)", "T": "stopped"}.get(fld[0], fld[0])
+                    cpu = int(fld[11]) + int(fld[12])
+                    now = time.monotonic()
+                    pct = max(0.0, (cpu - t["last"]) * 100.0 / hz / max(now - t["t"], 0.05))
+                    t["last"], t["t"] = cpu, now
+                except (OSError, IndexError, ValueError):
+                    state = "finished"
+            tstore.append([pid, t["name"], state, "%.0f" % pct, t["nice"], "%.0f s" % (time.monotonic() - t["t0"])])
+            if not alive and time.monotonic() - t["t"] > 30:
+                del tasks[pid]
+        return True
+    GLib.timeout_add(1000, refresh)
+
     win.show_all()
     Gtk.main()
 

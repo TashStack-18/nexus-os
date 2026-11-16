@@ -1,0 +1,982 @@
+#!/usr/bin/env python3
+"""NEXUS Rust Development Studio
+A lightweight, professional IDE for Rust and Cargo development on NEXUS OS.
+
+Features:
+- Create, open, edit, and save Rust projects and .rs files
+- Full Cargo project support (Cargo.toml, src/main.rs)
+- Rust syntax highlighting and line numbers
+- Integrated Cargo compiler (build, check, run, clean)
+- Diagnostics parser with line-jump to compiler errors and warnings
+- Real-time program execution and output streaming
+- Pre-loaded example programs (Concurrency, Synchronization, Fibonacci, Micro-OS task)
+- Target selection: Debian Linux Host vs Micro-OS Bare-Metal Kernel
+"""
+import os
+import re
+import sys
+import json
+import time
+import signal
+import threading
+import subprocess
+
+import gi
+gi.require_version("Gtk", "3.0")
+gi.require_version("Gdk", "3.0")
+gi.require_version("Pango", "1.0")
+from gi.repository import Gtk, Gdk, GLib, Pango
+
+EXAMPLES_DIR = "/usr/local/share/nexus/examples"
+DEFAULT_WORKSPACE = os.path.expanduser("~/nexus_rust_projects")
+
+EXAMPLES = {
+    "01_hello_world": {
+        "title": "Hello World",
+        "about": "Standard starter program demonstrating console output and basic syntax.",
+        "toml": '[package]\nname = "hello_world"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n',
+        "main": """// NEXUS OS - Hello World Example
+fn main() {
+    println!("========================================");
+    println!(" Welcome to Rust on NEXUS OS! ");
+    println!("========================================");
+    println!("Host Architecture: x86_64-unknown-linux-gnu");
+    println!("Compiled with: rustc / Cargo");
+    
+    let message = "NEXUS OS combines bare-metal speed with modern developer tooling.";
+    println!("{}", message);
+}
+"""
+    },
+    "02_fibonacci_primes": {
+        "title": "Fibonacci & Prime Numbers",
+        "about": "Algorithmic computation measuring compute throughput and iterations.",
+        "toml": '[package]\nname = "fibonacci_primes"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n',
+        "main": """// NEXUS OS - Algorithmic Compute Example
+use std::time::Instant;
+
+fn fibonacci(n: u32) -> u64 {
+    match n {
+        0 => 0,
+        1 => 1,
+        _ => {
+            let mut a = 0;
+            let mut b = 1;
+            for _ in 2..=n {
+                let temp = a + b;
+                a = b;
+                b = temp;
+            }
+            b
+        }
+    }
+}
+
+fn count_primes(limit: u32) -> u32 {
+    let mut count = 0;
+    for n in 2..=limit {
+        let mut is_prime = true;
+        let mut i = 2;
+        while i * i <= n {
+            if n % i == 0 {
+                is_prime = false;
+                break;
+            }
+            i += 1;
+        }
+        if is_prime {
+            count += 1;
+        }
+    }
+    count
+}
+
+fn main() {
+    println!("[NEXUS Studio] Benchmark Demo");
+    let start = Instant::now();
+
+    let fib_50 = fibonacci(50);
+    println!("Fibonacci(50) = {}", fib_50);
+
+    let primes_up_to_100k = count_primes(100_000);
+    println!("Prime numbers <= 100,000: {}", primes_up_to_100k);
+
+    println!("Completed in {:.2?}", start.elapsed());
+}
+"""
+    },
+    "03_concurrency_threads": {
+        "title": "Multi-Threaded Concurrency",
+        "about": "Spawning worker threads to demonstrate scheduling and parallel execution.",
+        "toml": '[package]\nname = "concurrency_demo"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n',
+        "main": """// NEXUS OS - Concurrency & Thread Scheduling Example
+use std::thread;
+use std::time::Duration;
+
+fn main() {
+    println!("[NEXUS OS] Spawning 5 concurrent worker threads...");
+
+    let mut handles = vec![];
+
+    for i in 1..=5 {
+        let handle = thread::spawn(move || {
+            println!("  [Worker #{}] Started on thread id {:?}", i, thread::current().id());
+            thread::sleep(Duration::from_millis(150 * i));
+            println!("  [Worker #{}] Finished processing.", i);
+            i * 10
+        });
+        handles.push(handle);
+    }
+
+    println!("[NEXUS OS] Main thread waiting for workers to complete...");
+
+    let mut results = vec![];
+    for handle in handles {
+        let res = handle.join().unwrap();
+        results.push(res);
+    }
+
+    println!("[NEXUS OS] All workers joined. Results: {:?}", results);
+}
+"""
+    },
+    "04_sync_mutex": {
+        "title": "Mutex Synchronization",
+        "about": "Demonstrating mutual exclusion and shared state between concurrent threads.",
+        "toml": '[package]\nname = "sync_mutex_demo"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n',
+        "main": """// NEXUS OS - Mutex Synchronization & Contention
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
+
+fn main() {
+    println!("[NEXUS OS] Testing Mutex-Protected Shared State");
+
+    let counter = Arc::new(Mutex::new(0));
+    let mut handles = vec![];
+
+    for id in 1..=8 {
+        let counter_clone = Arc::clone(&counter);
+        let handle = thread::spawn(move || {
+            for _ in 0..100 {
+                let mut num = counter_clone.lock().unwrap();
+                *num += 1;
+                // Tiny yield simulation
+                thread::sleep(Duration::from_micros(50));
+            }
+            println!("Thread {} completed its 100 increments.", id);
+        });
+        handles.push(handle);
+    }
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+
+    let final_val = *counter.lock().unwrap();
+    println!("Final counter value: {} (Expected: 800)", final_val);
+    assert_eq!(final_val, 800, "Mutex synchronization verified!");
+    println!("Verification passed: Mutual exclusion guaranteed!");
+}
+"""
+    },
+    "05_dining_philosophers": {
+        "title": "Dining Philosophers",
+        "about": "Classic operating systems synchronization problem and deadlock avoidance.",
+        "toml": '[package]\nname = "dining_philosophers"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n',
+        "main": """// NEXUS OS - Dining Philosophers (Deadlock Avoidance)
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
+
+struct Fork;
+
+fn main() {
+    println!("=== Dining Philosophers (Resource Hierarchy / Deadlock Free) ===");
+    let num_philosophers = 5;
+    let forks: Vec<Arc<Mutex<Fork>>> = (0..num_philosophers)
+        .map(|_| Arc::new(Mutex::new(Fork)))
+        .collect();
+
+    let mut handles = vec![];
+
+    for i in 0..num_philosophers {
+        let left = (i + 1) % num_philosophers;
+        let right = i;
+
+        // Resource hierarchy: always acquire lower-indexed fork first
+        let (first, second) = if left < right {
+            (Arc::clone(&forks[left]), Arc::clone(&forks[right]))
+        } else {
+            (Arc::clone(&forks[right]), Arc::clone(&forks[left]))
+        };
+
+        let handle = thread::spawn(move || {
+            println!("Philosopher {} is thinking...", i);
+            thread::sleep(Duration::from_millis(50));
+
+            let _f1 = first.lock().unwrap();
+            let _f2 = second.lock().unwrap();
+
+            println!("Philosopher {} acquired both forks and is EATING.", i);
+            thread::sleep(Duration::from_millis(100));
+            println!("Philosopher {} finished eating and put down forks.", i);
+        });
+        handles.push(handle);
+    }
+
+    for handle in handles {
+        handle.join().unwrap();
+    }
+    println!("All philosophers dined without deadlock!");
+}
+"""
+    },
+    "06_microos_kernel_task": {
+        "title": "Micro-OS Kernel Task Template",
+        "about": "Code conforming to the Rust Micro-OS bare-metal task execution interface.",
+        "toml": '# Micro-OS Kernel Program Template\n# Placed in kernel/src/programs/<name>.rs\n',
+        "main": """//! Custom Micro-OS Kernel Application
+//! This program is designed to be linked into or dispatched by the
+//! Rust Micro-OS Kernel (no_std environment).
+
+// When built inside the Micro-OS kernel:
+// use super::arg_u64;
+// use crate::sys;
+
+pub fn main(args: &[&str]) -> i32 {
+    let limit = 5;
+    println!("[Micro-OS Task] Started task with limit = {}", limit);
+
+    for i in 1..=limit {
+        println!("  [Task Step {}/{}] Working on CPU slice...", i, limit);
+        // In the Micro-OS kernel, cooperative yield or sleep:
+        // sys::sleep_ms(200);
+    }
+
+    println!("[Micro-OS Task] Task completed successfully.");
+    0
+}
+
+#[cfg(not(target_os = "none"))]
+fn main() {
+    let args = ["sample_arg"];
+    let exit_code = main(&args);
+    println!("Exited with code: {}", exit_code);
+}
+"""
+    }
+}
+
+DARK_CSS = b"""
+window { background-color: #0c101d; color: #e8edf8; font-family: 'DejaVu Sans', sans-serif; }
+headerbar { background: #12182b; border-bottom: 1px solid #1e2945; color: #ffffff; }
+.card { background-color: #141c30; border-radius: 8px; border: 1px solid #1e2945; }
+.editor-frame { background-color: #0a0d18; border: 1px solid #1e2945; border-radius: 6px; }
+textview.editor { background-color: #0a0d18; color: #f0f4fc; font-family: 'DejaVu Sans Mono', 'Courier New', monospace; font-size: 11pt; }
+textview.console { background-color: #070910; color: #c8d3e8; font-family: 'DejaVu Sans Mono', monospace; font-size: 10pt; }
+treeview { background-color: #101626; color: #d0daf0; font-size: 10pt; }
+treeview:selected { background-color: #2b3d6b; color: #ffffff; }
+notebook > header { background-color: #101626; border-bottom: 1px solid #1e2945; }
+notebook > header > tabs > tab { padding: 6px 14px; color: #8a9bb8; }
+notebook > header > tabs > tab:checked { color: #ffffff; border-bottom: 2px solid #5b8cff; background-color: #141c30; }
+button { background: #1c2640; color: #e8edf8; border-radius: 6px; border: 1px solid #28375a; padding: 5px 12px; font-weight: bold; }
+button:hover { background: #263558; border-color: #5b8cff; }
+button.primary { background: #3366ff; color: #ffffff; border-color: #4d79ff; }
+button.primary:hover { background: #4d79ff; }
+button.success { background: #1f8a48; color: #ffffff; border-color: #28a745; }
+button.danger { background: #bd2130; color: #ffffff; border-color: #dc3545; }
+label.title { font-size: 14pt; font-weight: bold; color: #ffffff; }
+label.subtitle { font-size: 9pt; color: #8a9bb8; }
+label.diag-error { color: #ff5f57; font-weight: bold; }
+label.diag-warn { color: #febc2e; font-weight: bold; }
+statusbar { background-color: #0d1222; color: #8a9bb8; font-size: 9pt; }
+"""
+
+class RustStudioApp(Gtk.Window):
+    def __init__(self):
+        super().__init__(title="NEXUS Rust Development Studio")
+        self.set_default_size(1180, 780)
+        self.set_position(Gtk.WindowPosition.CENTER)
+        self.connect("destroy", Gtk.main_quit)
+
+        self.active_project_dir = None
+        self.active_file_path = None
+        self.active_process = None
+        self.is_kernel_mode = False
+
+        self._setup_style()
+        self._init_ui()
+        self._load_initial_project()
+
+    def _setup_style(self):
+        provider = Gtk.CssProvider()
+        provider.load_from_data(DARK_CSS)
+        Gtk.StyleContext.add_provider_for_screen(
+            Gdk.Screen.get_default(), provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+
+    def _init_ui(self):
+        vbox = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.add(vbox)
+
+        # 1. Top Header Bar / Toolbar
+        top_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8, margin=8)
+        top_bar.get_style_context().add_class("card")
+        vbox.pack_start(top_bar, False, False, 0)
+
+        # Brand / Title
+        brand_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        title_lbl = Gtk.Label(xalign=0)
+        title_lbl.set_markup("<b>NEXUS Rust Studio</b>")
+        title_lbl.get_style_context().add_class("title")
+        self.sub_lbl = Gtk.Label(label="No project loaded", xalign=0)
+        self.sub_lbl.get_style_context().add_class("subtitle")
+        brand_box.pack_start(title_lbl, False, False, 0)
+        brand_box.pack_start(self.sub_lbl, False, False, 0)
+        top_bar.pack_start(brand_box, False, False, 6)
+
+        sep1 = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
+        top_bar.pack_start(sep1, False, False, 6)
+
+        # Project Controls
+        btn_new_proj = Gtk.Button(label="+ New Project")
+        btn_new_proj.connect("clicked", self._on_new_project_dialog)
+        top_bar.pack_start(btn_new_proj, False, False, 0)
+
+        btn_open = Gtk.Button(label="Open Folder...")
+        btn_open.connect("clicked", self._on_open_project_dialog)
+        top_bar.pack_start(btn_open, False, False, 0)
+
+        btn_new_file = Gtk.Button(label="+ New File")
+        btn_new_file.connect("clicked", self._on_new_file_dialog)
+        top_bar.pack_start(btn_new_file, False, False, 0)
+
+        btn_save = Gtk.Button(label="Save")
+        btn_save.connect("clicked", self._on_save_file)
+        top_bar.pack_start(btn_save, False, False, 0)
+
+        # Examples dropdown
+        self.example_combo = Gtk.ComboBoxText()
+        self.example_combo.append("", "Load Example Program...")
+        for key, val in EXAMPLES.items():
+            self.example_combo.append(key, val["title"])
+        self.example_combo.set_active(0)
+        self.example_combo.connect("changed", self._on_example_selected)
+        top_bar.pack_start(self.example_combo, False, False, 0)
+
+        sep2 = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
+        top_bar.pack_start(sep2, False, False, 6)
+
+        # Cargo Controls
+        self.btn_check = Gtk.Button(label="Check")
+        self.btn_check.connect("clicked", lambda _: self._run_cargo(["check"]))
+        top_bar.pack_start(self.btn_check, False, False, 0)
+
+        self.btn_build = Gtk.Button(label="Build")
+        self.btn_build.get_style_context().add_class("primary")
+        self.btn_build.connect("clicked", lambda _: self._run_cargo(["build"]))
+        top_bar.pack_start(self.btn_build, False, False, 0)
+
+        self.btn_run = Gtk.Button(label="Run")
+        self.btn_run.get_style_context().add_class("success")
+        self.btn_run.connect("clicked", lambda _: self._run_cargo(["run"]))
+        top_bar.pack_start(self.btn_run, False, False, 0)
+
+        self.btn_stop = Gtk.Button(label="Stop")
+        self.btn_stop.get_style_context().add_class("danger")
+        self.btn_stop.set_sensitive(False)
+        self.btn_stop.connect("clicked", self._on_stop_process)
+        top_bar.pack_start(self.btn_stop, False, False, 0)
+
+        # Target Mode Switch
+        right_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        lbl_mode = Gtk.Label(label="Target:")
+        self.target_combo = Gtk.ComboBoxText()
+        self.target_combo.append("linux", "Linux (x86_64)")
+        self.target_combo.append("kernel", "Micro-OS Kernel")
+        self.target_combo.set_active(0)
+        self.target_combo.connect("changed", self._on_target_changed)
+        right_box.pack_start(lbl_mode, False, False, 0)
+        right_box.pack_start(self.target_combo, False, False, 0)
+        top_bar.pack_end(right_box, False, False, 4)
+
+        # 2. Main Workspace Splitter (Left: Explorer, Right: Editor + Output)
+        hpaned = Gtk.Paned(orientation=Gtk.Orientation.HORIZONTAL)
+        hpaned.set_position(240)
+        vbox.pack_start(hpaned, True, True, 0)
+
+        # --- Left: Explorer Pane ---
+        left_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, margin=6)
+        left_box.get_style_context().add_class("card")
+        hpaned.pack1(left_box, False, False)
+
+        exp_header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4, margin=6)
+        exp_lbl = Gtk.Label(label="<b>Project Explorer</b>", use_markup=True, xalign=0)
+        exp_header.pack_start(exp_lbl, True, True, 0)
+        btn_refresh = Gtk.Button(label="↻")
+        btn_refresh.set_tooltip_text("Refresh project files")
+        btn_refresh.connect("clicked", lambda _: self._refresh_file_tree())
+        exp_header.pack_end(btn_refresh, False, False, 0)
+        left_box.pack_start(exp_header, False, False, 0)
+
+        # Tree Store: [Display Name, Relative Path, Full Path, Is Directory]
+        self.tree_store = Gtk.TreeStore(str, str, str, bool)
+        self.tree_view = Gtk.TreeView(model=self.tree_store)
+        self.tree_view.set_headers_visible(False)
+        col = Gtk.TreeViewColumn("Files")
+        renderer = Gtk.CellRendererText()
+        col.pack_start(renderer, True)
+        col.add_attribute(renderer, "text", 0)
+        self.tree_view.append_column(col)
+        self.tree_view.connect("row-activated", self._on_tree_row_activated)
+
+        sc_tree = Gtk.ScrolledWindow()
+        sc_tree.add(self.tree_view)
+        left_box.pack_start(sc_tree, True, True, 0)
+
+        # --- Right: Editor (Top) & Console (Bottom) Splitter ---
+        vpaned = Gtk.Paned(orientation=Gtk.Orientation.VERTICAL)
+        vpaned.set_position(440)
+        hpaned.pack2(vpaned, True, False)
+
+        # Top Right: Editor Tabs
+        editor_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, margin=6)
+        editor_box.get_style_context().add_class("editor-frame")
+        vpaned.pack1(editor_box, True, False)
+
+        # Editor Notebook
+        self.editor_notebook = Gtk.Notebook()
+        self.editor_notebook.set_scrollable(True)
+        self.editor_notebook.connect("switch-page", self._on_tab_switched)
+        editor_box.pack_start(self.editor_notebook, True, True, 0)
+
+        # Bottom Right: Output & Diagnostics Notebook
+        output_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, margin=6)
+        output_box.get_style_context().add_class("card")
+        vpaned.pack2(output_box, False, False)
+
+        self.out_notebook = Gtk.Notebook()
+        output_box.pack_start(self.out_notebook, True, True, 0)
+
+        # Tab 1: Build & Execution Output
+        tab1_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, margin=6)
+        self.console_view = Gtk.TextView()
+        self.console_view.set_editable(False)
+        self.console_view.set_cursor_visible(False)
+        self.console_view.get_style_context().add_class("console")
+        self.console_buf = self.console_view.get_buffer()
+        sc_console = Gtk.ScrolledWindow()
+        sc_console.add(self.console_view)
+        tab1_box.pack_start(sc_console, True, True, 0)
+        self.out_notebook.append_page(tab1_box, Gtk.Label(label="Execution Output"))
+
+        # Tab 2: Compiler Diagnostics
+        tab2_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, margin=6)
+        # Store: [Severity, File, Line, Message]
+        self.diag_store = Gtk.ListStore(str, str, int, str)
+        self.diag_view = Gtk.TreeView(model=self.diag_store)
+        for i, title in enumerate(("Severity", "File", "Line", "Message")):
+            renderer = Gtk.CellRendererText()
+            dcol = Gtk.TreeViewColumn(title, renderer, text=i)
+            self.diag_view.append_column(dcol)
+        self.diag_view.connect("row-activated", self._on_diag_row_activated)
+        sc_diag = Gtk.ScrolledWindow()
+        sc_diag.add(self.diag_view)
+        tab2_box.pack_start(sc_diag, True, True, 0)
+        self.out_notebook.append_page(tab2_box, Gtk.Label(label="Diagnostics & Errors"))
+
+        # Tab 3: Quick Terminal Launcher
+        tab3_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=8, margin=14)
+        term_lbl = Gtk.Label(label="<b>Integrated Shell Controls</b>", use_markup=True, xalign=0)
+        term_sub = Gtk.Label(label="Open an interactive xfce4-terminal inside the active project directory:", xalign=0)
+        btn_open_term = Gtk.Button(label="Launch Terminal in Project Directory")
+        btn_open_term.connect("clicked", self._on_launch_external_term)
+        tab3_box.pack_start(term_lbl, False, False, 0)
+        tab3_box.pack_start(term_sub, False, False, 0)
+        tab3_box.pack_start(btn_open_term, False, False, 0)
+        self.out_notebook.append_page(tab3_box, Gtk.Label(label="Terminal"))
+
+        # 3. Status Bar
+        self.statusbar = Gtk.Statusbar()
+        self.status_context = self.statusbar.get_context_id("main")
+        self.statusbar.push(self.status_context, "Ready")
+        vbox.pack_end(self.statusbar, False, False, 0)
+
+        # Keyboard shortcuts
+        accel = Gtk.AccelGroup()
+        self.add_accel_group(accel)
+        key, mod = Gtk.accelerator_parse("<Control>s")
+        accel.connect(key, mod, Gtk.AccelFlags.VISIBLE, lambda *_: self._on_save_file())
+
+    # ------------------------------------------------------------- Syntax Highlighter
+    def _apply_syntax_highlighting(self, text_buf):
+        # Configure tags if not already present
+        table = text_buf.get_tag_table()
+        if not table.lookup("keyword"):
+            tag_kw = text_buf.create_tag("keyword", foreground="#7c4dff", weight=Pango.Weight.BOLD)
+            tag_type = text_buf.create_tag("type", foreground="#34d1bf", weight=Pango.Weight.BOLD)
+            tag_macro = text_buf.create_tag("macro", foreground="#ffb86b", weight=Pango.Weight.BOLD)
+            tag_str = text_buf.create_tag("string", foreground="#28c840")
+            tag_comment = text_buf.create_tag("comment", foreground="#718096", style=Pango.Style.ITALIC)
+            tag_num = text_buf.create_tag("number", foreground="#febc2e")
+            tag_attr = text_buf.create_tag("attribute", foreground="#5b8cff")
+
+        # Clear existing formatting
+        start, end = text_buf.get_bounds()
+        text_buf.remove_all_tags(start, end)
+        content = text_buf.get_text(start, end, False)
+
+        patterns = [
+            (r'//.*$', "comment"),
+            (r'/\*[\s\S]*?\*/', "comment"),
+            (r'#\[.*?\]|#!\[.*?\]', "attribute"),
+            (r'"(?:\\.|[^"\\])*"', "string"),
+            (r"'(?:\\.|[^'\\])+'", "string"),
+            (r'\b(fn|let|mut|struct|enum|impl|pub|use|mod|match|if|else|while|for|in|return|async|await|unsafe|trait|type|const|static|where|move|as|break|continue|loop)\b', "keyword"),
+            (r'\b(i8|i16|i32|i64|i128|u8|u16|u32|u64|u128|usize|isize|f32|f64|bool|char|str|String|Vec|Option|Result|Some|None|Ok|Err|Box|Arc|Mutex|Rc|Cell|RefCell)\b', "type"),
+            (r'\b(println!|print!|eprintln!|format!|vec!|panic!|assert!|assert_eq!|todo!|kinfo!|ktrace!)\b', "macro"),
+            (r'\b\d+(?:_\d+)*(?:\.\d+)?(?:[eE][+-]?\d+)?(?:[uif]\d+|usize)?\b', "number"),
+        ]
+
+        for regex, tag_name in patterns:
+            for match in re.finditer(regex, content, re.MULTILINE):
+                s_iter = text_buf.get_iter_at_offset(match.start())
+                e_iter = text_buf.get_iter_at_offset(match.end())
+                text_buf.apply_tag_by_name(tag_name, s_iter, e_iter)
+
+    # ------------------------------------------------------------- Editor Tabs
+    def _create_editor_tab(self, file_path, content=""):
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        sc = Gtk.ScrolledWindow()
+        tv = Gtk.TextView()
+        tv.get_style_context().add_class("editor")
+        tv.set_monospace(True)
+        tv.set_left_margin(12)
+        tv.set_right_margin(12)
+
+        buf = tv.get_buffer()
+        buf.set_text(content)
+        self._apply_syntax_highlighting(buf)
+
+        buf.connect("changed", lambda b: self._apply_syntax_highlighting(b))
+        buf.connect("notify::cursor-position", self._on_cursor_moved)
+
+        sc.add(tv)
+        box.pack_start(sc, True, True, 0)
+        box.show_all()
+
+        filename = os.path.basename(file_path)
+        tab_label = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        lbl = Gtk.Label(label=filename)
+        btn_close = Gtk.Button(label="×")
+        btn_close.set_relief(Gtk.ReliefStyle.NONE)
+        btn_close.connect("clicked", lambda _: self._close_editor_tab(box, file_path))
+        tab_label.pack_start(lbl, False, False, 0)
+        tab_label.pack_start(btn_close, False, False, 0)
+        tab_label.show_all()
+
+        page_idx = self.editor_notebook.append_page(box, tab_label)
+        self.editor_notebook.set_current_page(page_idx)
+        box.file_path = file_path
+        box.text_view = tv
+        box.text_buffer = buf
+
+        self.active_file_path = file_path
+        self._update_title()
+
+    def _close_editor_tab(self, page_widget, file_path):
+        idx = self.editor_notebook.page_num(page_widget)
+        if idx != -1:
+            self.editor_notebook.remove_page(idx)
+        if self.editor_notebook.get_n_pages() == 0:
+            self.active_file_path = None
+            self._update_title()
+
+    def _tab_switched(self, notebook, page, page_num):
+        page_widget = notebook.get_nth_page(page_num)
+        if hasattr(page_widget, "file_path"):
+            self.active_file_path = page_widget.file_path
+            self._update_title()
+
+    def _on_tab_switched(self, notebook, page, page_num):
+        self._tab_switched(notebook, page, page_num)
+
+    def _on_cursor_moved(self, text_buf, param_spec):
+        pos = text_buf.get_property("cursor-position")
+        it = text_buf.get_iter_at_offset(pos)
+        line = it.get_line() + 1
+        col = it.get_line_offset() + 1
+        self.statusbar.pop(self.status_context)
+        self.statusbar.push(self.status_context, f"Ln {line}, Col {col} | UTF-8")
+
+    def _get_current_editor(self):
+        cur_idx = self.editor_notebook.get_current_page()
+        if cur_idx != -1:
+            page = self.editor_notebook.get_nth_page(cur_idx)
+            return page.file_path, page.text_buffer
+        return None, None
+
+    # ------------------------------------------------------------- Project & File Tree
+    def _load_initial_project(self):
+        os.makedirs(DEFAULT_WORKSPACE, exist_ok=True)
+        # Ensure Hello World example exists
+        default_proj = os.path.join(DEFAULT_WORKSPACE, "01_hello_world")
+        if not os.path.exists(default_proj):
+            self._create_project_from_template("01_hello_world", default_proj)
+
+        self._set_active_project(default_proj)
+
+    def _set_active_project(self, proj_dir):
+        self.active_project_dir = proj_dir
+        self.sub_lbl.set_text(f"Project: {os.path.basename(proj_dir)} ({proj_dir})")
+        self._refresh_file_tree()
+
+        # Open src/main.rs by default if it exists
+        main_rs = os.path.join(proj_dir, "src", "main.rs")
+        if os.path.exists(main_rs):
+            self._open_file_in_editor(main_rs)
+
+    def _refresh_file_tree(self):
+        self.tree_store.clear()
+        if not self.active_project_dir or not os.path.exists(self.active_project_dir):
+            return
+
+        def add_nodes(parent_iter, current_path):
+            try:
+                entries = sorted(os.listdir(current_path))
+            except OSError:
+                return
+
+            for name in entries:
+                if name.startswith(".") or name == "target":
+                    continue
+                full_p = os.path.join(current_path, name)
+                is_dir = os.path.isdir(full_p)
+                rel_p = os.path.relpath(full_p, self.active_project_dir)
+                node_iter = self.tree_store.append(parent_iter, [name, rel_p, full_p, is_dir])
+                if is_dir:
+                    add_nodes(node_iter, full_p)
+
+        root_name = os.path.basename(self.active_project_dir)
+        root_iter = self.tree_store.append(None, [f"📦 {root_name}", ".", self.active_project_dir, True])
+        add_nodes(root_iter, self.active_project_dir)
+        self.tree_view.expand_all()
+
+    def _on_tree_row_activated(self, tree_view, path, column):
+        model = tree_view.get_model()
+        it = model.get_iter(path)
+        is_dir = model.get_value(it, 3)
+        full_path = model.get_value(it, 2)
+        if not is_dir:
+            self._open_file_in_editor(full_path)
+
+    def _open_file_in_editor(self, full_path):
+        # Check if already open
+        for i in range(self.editor_notebook.get_n_pages()):
+            page = self.editor_notebook.get_nth_page(i)
+            if hasattr(page, "file_path") and page.file_path == full_path:
+                self.editor_notebook.set_current_page(i)
+                return
+
+        try:
+            with open(full_path, "r", encoding="utf-8") as f:
+                content = f.read()
+        except Exception as e:
+            self._log_console(f"Error opening file {full_path}: {e}\n")
+            return
+
+        self._create_editor_tab(full_path, content)
+
+    def _update_title(self):
+        proj_str = os.path.basename(self.active_project_dir) if self.active_project_dir else "No Project"
+        file_str = os.path.basename(self.active_file_path) if self.active_file_path else "Untitled"
+        self.set_title(f"{file_str} - {proj_str} - NEXUS Rust Studio")
+
+    # ------------------------------------------------------------- File Operations
+    def _on_save_file(self):
+        file_path, buf = self._get_current_editor()
+        if not file_path or not buf:
+            return
+
+        start, end = buf.get_bounds()
+        text = buf.get_text(start, end, False)
+        try:
+            with open(file_path, "w", encoding="utf-8") as f:
+                f.write(text)
+            self.statusbar.pop(self.status_context)
+            self.statusbar.push(self.status_context, f"Saved: {os.path.basename(file_path)}")
+            self._log_console(f"[NEXUS Studio] Saved {file_path}\n")
+        except Exception as e:
+            self._log_console(f"Save error: {e}\n")
+
+    def _on_new_file_dialog(self, _):
+        if not self.active_project_dir:
+            return
+        dialog = Gtk.Dialog(title="Create New File", parent=self, flags=0)
+        dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OK, Gtk.ResponseType.OK)
+        box = dialog.get_content_area()
+        box.set_spacing(8)
+        box.set_margin_top(10)
+        box.set_margin_bottom(10)
+        box.set_margin_left(14)
+        box.set_margin_right(14)
+
+        lbl = Gtk.Label(label="File name (e.g. src/utils.rs):")
+        entry = Gtk.Entry()
+        entry.set_text("src/lib.rs")
+        box.pack_start(lbl, False, False, 0)
+        box.pack_start(entry, False, False, 0)
+        dialog.show_all()
+
+        res = dialog.run()
+        if res == Gtk.ResponseType.OK:
+            fname = entry.get_text().strip()
+            if fname:
+                target_p = os.path.join(self.active_project_dir, fname)
+                os.makedirs(os.path.dirname(target_p), exist_ok=True)
+                if not os.path.exists(target_p):
+                    with open(target_p, "w") as f:
+                        f.write("// New Rust source file\n\n")
+                self._refresh_file_tree()
+                self._open_file_in_editor(target_p)
+        dialog.destroy()
+
+    def _on_new_project_dialog(self, _):
+        dialog = Gtk.Dialog(title="Create New Rust Project", parent=self, flags=0)
+        dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OK, Gtk.ResponseType.OK)
+        box = dialog.get_content_area()
+        box.set_spacing(8)
+        box.set_margin_top(10)
+        box.set_margin_bottom(10)
+        box.set_margin_left(14)
+        box.set_margin_right(14)
+
+        lbl = Gtk.Label(label="Project Name:")
+        entry = Gtk.Entry()
+        entry.set_text("my_nexus_app")
+        box.pack_start(lbl, False, False, 0)
+        box.pack_start(entry, False, False, 0)
+
+        tmpl_lbl = Gtk.Label(label="Template:")
+        combo = Gtk.ComboBoxText()
+        for k, v in EXAMPLES.items():
+            combo.append(k, v["title"])
+        combo.set_active(0)
+        box.pack_start(tmpl_lbl, False, False, 0)
+        box.pack_start(combo, False, False, 0)
+        dialog.show_all()
+
+        res = dialog.run()
+        if res == Gtk.ResponseType.OK:
+            name = entry.get_text().strip()
+            tmpl_key = combo.get_active_id()
+            if name:
+                target_dir = os.path.join(DEFAULT_WORKSPACE, name)
+                self._create_project_from_template(tmpl_key, target_dir)
+                self._set_active_project(target_dir)
+        dialog.destroy()
+
+    def _on_open_project_dialog(self, _):
+        dialog = Gtk.FileChooserDialog(
+            title="Choose Project Folder", parent=self, action=Gtk.FileChooserAction.SELECT_FOLDER
+        )
+        dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OPEN, Gtk.ResponseType.OK)
+        dialog.set_current_folder(DEFAULT_WORKSPACE)
+
+        res = dialog.run()
+        if res == Gtk.ResponseType.OK:
+            folder = dialog.get_filename()
+            self._set_active_project(folder)
+        dialog.destroy()
+
+    def _create_project_from_template(self, tmpl_key, target_dir):
+        os.makedirs(target_dir, exist_ok=True)
+        src_dir = os.path.join(target_dir, "src")
+        os.makedirs(src_dir, exist_ok=True)
+
+        tmpl = EXAMPLES.get(tmpl_key, EXAMPLES["01_hello_world"])
+        toml_content = tmpl["toml"]
+        main_content = tmpl["main"]
+
+        with open(os.path.join(target_dir, "Cargo.toml"), "w", encoding="utf-8") as f:
+            f.write(toml_content)
+        with open(os.path.join(src_dir, "main.rs"), "w", encoding="utf-8") as f:
+            f.write(main_content)
+
+    def _on_example_selected(self, combo):
+        key = combo.get_active_id()
+        if not key or key not in EXAMPLES:
+            return
+        target_dir = os.path.join(DEFAULT_WORKSPACE, key)
+        if not os.path.exists(target_dir):
+            self._create_project_from_template(key, target_dir)
+        self._set_active_project(target_dir)
+        combo.set_active(0)
+
+    def _on_target_changed(self, combo):
+        mode = combo.get_active_id()
+        self.is_kernel_mode = (mode == "kernel")
+        if self.is_kernel_mode:
+            self._log_console("\n[NEXUS Studio] Target switched to: Micro-OS Kernel (no_std, x86_64 / RISC-V)\n")
+            if os.path.exists("/opt/micro-os/src"):
+                self._set_active_project("/opt/micro-os/src")
+            elif os.path.exists(os.path.expanduser("~/micro-os")):
+                self._set_active_project(os.path.expanduser("~/micro-os"))
+        else:
+            self._log_console("\n[NEXUS Studio] Target switched to: Debian Linux Host (std, Cargo/rustc)\n")
+
+    # ------------------------------------------------------------- Build & Execution
+    def _log_console(self, text):
+        def _append():
+            self.console_buf.insert(self.console_buf.get_end_iter(), text)
+            it = self.console_buf.get_end_iter()
+            self.console_view.scroll_to_iter(it, 0, False, 0, 0)
+        GLib.idle_add(_append)
+
+    def _clear_console(self):
+        self.console_buf.set_text("")
+        self.diag_store.clear()
+
+    def _parse_diagnostics(self, stderr_text):
+        # Regex matching typical rustc error format:
+        # error[E0384]: cannot assign twice to immutable variable `x`
+        #  --> src/main.rs:14:5
+        err_re = re.compile(r'^(error|warning)(?:\[E\d+\])?: (.*?)$', re.MULTILINE)
+        loc_re = re.compile(r'^\s*-->\s*(.*?):(\d+):(\d+)', re.MULTILINE)
+
+        lines = stderr_text.splitlines()
+        i = 0
+        while i < len(lines):
+            m_err = err_re.match(lines[i])
+            if m_err:
+                severity = m_err.group(1).upper()
+                msg = m_err.group(2)
+                file_p = "unknown"
+                line_no = 0
+                if i + 1 < len(lines):
+                    m_loc = loc_re.match(lines[i+1])
+                    if m_loc:
+                        file_p = m_loc.group(1)
+                        line_no = int(m_loc.group(2))
+                self.diag_store.append([severity, file_p, line_no, msg])
+            i += 1
+
+    def _on_diag_row_activated(self, tree_view, path, column):
+        model = tree_view.get_model()
+        it = model.get_iter(path)
+        file_name = model.get_value(it, 1)
+        line_no = model.get_value(it, 2)
+        if file_name and self.active_project_dir:
+            target_p = os.path.join(self.active_project_dir, file_name)
+            if os.path.exists(target_p):
+                self._open_file_in_editor(target_p)
+                # Scroll to line
+                _, buf = self._get_current_editor()
+                if buf and line_no > 0:
+                    it_line = buf.get_iter_at_line(line_no - 1)
+                    buf.place_cursor(it_line)
+
+    def _run_cargo(self, args):
+        if self.active_process and self.active_process.poll() is None:
+            self._log_console("Another process is currently running. Click 'Stop' first.\n")
+            return
+
+        self._on_save_file()
+        self._clear_console()
+        self.out_notebook.set_current_page(0)
+
+        cmd = ["cargo"] + args
+        if self.is_kernel_mode:
+            cmd = ["cargo", "build", "--target", "x86_64-unknown-none"]
+
+        cwd = self.active_project_dir if self.active_project_dir else DEFAULT_WORKSPACE
+
+        self._log_console(f"==> Executing: {' '.join(cmd)} in {cwd}\n")
+        self.btn_stop.set_sensitive(True)
+        self.statusbar.pop(self.status_context)
+        self.statusbar.push(self.status_context, f"Running: {' '.join(cmd)}")
+
+        def worker():
+            try:
+                env = os.environ.copy()
+                env["RUST_BACKTRACE"] = "1"
+                proc = subprocess.Popen(
+                    cmd,
+                    cwd=cwd,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    bufsize=1,
+                    env=env
+                )
+                self.active_process = proc
+
+                all_stderr = []
+
+                def stream_pipe(pipe, is_err=False):
+                    for line in pipe:
+                        if is_err:
+                            all_stderr.append(line)
+                        self._log_console(line)
+
+                t1 = threading.Thread(target=stream_pipe, args=(proc.stdout, False), daemon=True)
+                t2 = threading.Thread(target=stream_pipe, args=(proc.stderr, True), daemon=True)
+                t1.start()
+                t2.start()
+
+                t1.join()
+                t2.join()
+                rc = proc.wait()
+
+                err_joined = "".join(all_stderr)
+                if err_joined:
+                    GLib.idle_add(self._parse_diagnostics, err_joined)
+
+                def on_done():
+                    self.btn_stop.set_sensitive(False)
+                    self.active_process = None
+                    if rc == 0:
+                        self._log_console(f"\n[Success] Process completed with return code {rc}\n")
+                        self.statusbar.pop(self.status_context)
+                        self.statusbar.push(self.status_context, "Build / Run: Succeeded")
+                    else:
+                        self._log_console(f"\n[Failed] Process exited with error code {rc}\n")
+                        self.statusbar.pop(self.status_context)
+                        self.statusbar.push(self.status_context, f"Build / Run: Failed ({rc})")
+                        if len(self.diag_store) > 0:
+                            self.out_notebook.set_current_page(1)
+
+                GLib.idle_add(on_done)
+
+            except Exception as e:
+                self._log_console(f"\nExecution error: {e}\n")
+                GLib.idle_add(lambda: self.btn_stop.set_sensitive(False))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_stop_process(self, _):
+        if self.active_process and self.active_process.poll() is None:
+            self._log_console("\n[NEXUS Studio] Sending SIGKILL to active process...\n")
+            try:
+                self.active_process.kill()
+            except OSError:
+                pass
+            self.btn_stop.set_sensitive(False)
+
+    def _on_launch_external_term(self, _):
+        cwd = self.active_project_dir if self.active_project_dir else DEFAULT_WORKSPACE
+        try:
+            subprocess.Popen(["xfce4-terminal", f"--working-directory={cwd}"])
+        except Exception as e:
+            self._log_console(f"Failed to launch terminal: {e}\n")
+
+
+def main():
+    app = RustStudioApp()
+    app.show_all()
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()
