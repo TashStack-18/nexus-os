@@ -8,3 +8,4 @@ Icon=applications-science
 Categories=System;Science;
 Terminal=false
 StartupNotify=true
+StartupWMClass=nexus-lab
