@@ -11,7 +11,11 @@ use microos_core::mem::{AllocStats, Fit, FreeError, FreeListAllocator, RegionAll
 
 use crate::sync::IrqSpinLock;
 
+/// 16 MiB on RISC-V; the PC desktop keeps two full-screen buffers, so it gets 48 MiB.
+#[cfg(target_arch = "riscv64")]
 pub const HEAP_SIZE: usize = 16 * 1024 * 1024;
+#[cfg(target_arch = "x86_64")]
+pub const HEAP_SIZE: usize = 48 * 1024 * 1024;
 
 extern "C" {
     static __kernel_start: u8;

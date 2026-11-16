@@ -22,8 +22,8 @@ mb2_header:
     .short 5                          # framebuffer tag: ask GRUB for a graphics mode
     .short 1                          # optional: fall back to VGA text if unavailable
     .long 20
-    .long 1024                        # width
-    .long 768                         # height
+    .long 0                           # width: no preference, use GRUB's gfxmode list
+    .long 0                           # height: no preference
     .long 32                          # bits per pixel
     .align 8
     .short 0                          # end tag

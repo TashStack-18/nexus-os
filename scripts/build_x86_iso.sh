@@ -21,11 +21,13 @@ trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/boot/grub"
 cp "$ROOT/kernel/target/x86_64-unknown-none/release/microos" "$WORK/boot/microos.elf"
 cat > "$WORK/boot/grub/grub.cfg" <<EOF
-set timeout=5
+set timeout=1
 set default=${DEFAULT:-0}
 insmod all_video
-set gfxmode=1024x768x32,auto
+insmod gfxterm
+set gfxmode=1920x1080x32,1600x900x32,1366x768x32,1280x720x32,1024x768x32,auto
 set gfxpayload=keep
+terminal_output gfxterm
 
 menuentry "Micro-OS (Rust kernel) - desktop" {
     multiboot2 /boot/microos.elf test=shell trace=0

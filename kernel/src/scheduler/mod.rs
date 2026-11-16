@@ -312,6 +312,38 @@ pub fn begin(cfg: Config) {
     });
 }
 
+#[cfg(target_arch = "x86_64")]
+/// Switch the scheduling policy of the running system (used by the desktop's
+/// Scheduler Lab). Tasks that are READY are re-queued under the new policy in
+/// task-id order; the running task keeps its current slice and is queued under
+/// the new policy when it next leaves the CPU. `switch_cost_us` is the modelled
+/// context-switch cost (R3 uses 200 us; 0 for normal use).
+pub fn switch_policy(kind: PolicyKind, quantum: u32, bursts: BurstInfo, switch_cost_us: u64) {
+    let _irq = IrqGuard::new();
+    let mut g = SCHED.lock();
+    let Some(s) = g.as_mut() else { return };
+    let mut policy = sched::build(kind, quantum);
+    let ready: Vec<Tid> = s.tasks.iter().filter(|(_, t)| t.state == TaskState::Ready).map(|(&tid, _)| tid).collect();
+    s.cfg.policy = kind;
+    s.cfg.quantum = quantum;
+    s.cfg.bursts = bursts;
+    s.cfg.switch_cost_us = switch_cost_us;
+    let now = timer::ticks();
+    for tid in ready {
+        if let Some(t) = s.tasks.get_mut(&tid) {
+            policy.enqueue(&mut t.sched, Reason::Woken, now);
+        }
+    }
+    ktrace!("POLICY_SWITCH", "policy={} q={} bursts={:?}", policy.name(), quantum, bursts);
+    s.policy = policy;
+}
+
+#[cfg(target_arch = "x86_64")]
+/// Number of tasks that have terminated since the run began.
+pub fn finished_count() -> usize {
+    SCHED.lock().as_ref().map_or(0, |s| s.finished.len())
+}
+
 /// Create a task running `f`. It becomes READY now, or after `delay_ticks`.
 pub fn spawn<F>(name: &'static str, opts: SpawnOpts, f: F) -> Result<Tid, SpawnError>
 where

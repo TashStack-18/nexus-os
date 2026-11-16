@@ -69,7 +69,7 @@ pub extern "C" fn kmain(a0: usize, a1: usize) -> ! {
     let (heap_start, heap_size) = memory::init();
     // PC: switch the console to the desktop if GRUB gave us a graphics mode.
     #[cfg(target_arch = "x86_64")]
-    drivers::gui::init(boot::framebuffer(a0, a1));
+    drivers::gui::init(boot::framebuffer(a0, a1), args.get("test") == Some("shell"));
     let (kstart, kend) = memory::kernel_image();
     kinfo!("kernel image {:#x}..{:#x} ({} KiB)", kstart, kend, (kend - kstart) / 1024);
     kinfo!("heap {:#x}..{:#x} ({} KiB, first-fit free list)", heap_start, heap_start + heap_size, heap_size / 1024);

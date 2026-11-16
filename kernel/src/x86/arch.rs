@@ -90,6 +90,15 @@ pub unsafe fn outw(port: u16, v: u16) {
 }
 
 /// # Safety
+/// As for [`outb`].
+#[inline]
+pub unsafe fn inw(port: u16) -> u16 {
+    let v: u16;
+    asm!("in ax, dx", in("dx") port, out("ax") v, options(nomem, nostack, preserves_flags));
+    v
+}
+
+/// # Safety
 /// Reading some ports has device side effects (e.g. consuming a byte).
 #[inline]
 pub unsafe fn inb(port: u16) -> u8 {

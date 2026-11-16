@@ -7,10 +7,13 @@
 //! Without a framebuffer (text-mode boot) none of this starts and the shell
 //! uses the VGA text screen as before.
 
+mod apps;
 mod canvas;
 mod desktop;
 mod font;
 mod input;
+mod lab;
+mod modeset;
 mod rtc;
 
 use alloc::format;
@@ -25,6 +28,7 @@ use super::vga;
 static mut FB: Option<Framebuffer> = None;
 static mut FONTS: Option<font::Fonts> = None;
 static ACTIVE: AtomicBool = AtomicBool::new(false);
+static ROOMY: AtomicBool = AtomicBool::new(false);
 /// True while no desktop task is drawing: console cells are then painted
 /// straight onto the screen (boot messages, test runs, the final screen).
 static DIRECT: AtomicBool = AtomicBool::new(false);
@@ -78,8 +82,10 @@ fn fb() -> Option<Framebuffer> {
 
 /// Called at boot with the framebuffer GRUB set up (if any). From here on
 /// console output goes to the in-memory terminal grid.
-pub fn init(fb: Option<Framebuffer>) {
+pub fn init(fb: Option<Framebuffer>, splash: bool) {
     let Some(fb) = fb else { return };
+    // Switch to a bigger screen mode if the card allows it.
+    let fb = modeset::upgrade(fb);
     // SAFETY: single-threaded boot; nothing reads FB or FONTS before this.
     unsafe {
         *core::ptr::addr_of_mut!(FB) = Some(fb);
@@ -89,7 +95,15 @@ pub fn init(fb: Option<Framebuffer>) {
         // SAFETY: row y of the mode GRUB set up (checked in boot::framebuffer).
         unsafe { core::slice::from_raw_parts_mut((fb.addr + y * fb.pitch) as *mut u32, fb.width).fill(CONSOLE_BG) };
     }
-    DIRECT.store(true, Relaxed);
+    // The desktop needs room for its windows; on a smaller screen the shell
+    // is shown directly instead.
+    let roomy = fb.width >= 1024 && fb.height >= 700;
+    if splash && roomy {
+        draw_splash(&fb);
+    } else {
+        DIRECT.store(true, Relaxed);
+    }
+    ROOMY.store(roomy, Relaxed);
     vga::use_grid();
     input::init_mouse();
     ACTIVE.store(true, Relaxed);
@@ -102,16 +116,39 @@ pub fn resolution() -> (usize, usize) {
 
 /// Start the desktop task (shell mode). It ends when the shell exits.
 pub fn start() {
+    if !ROOMY.load(Relaxed) {
+        return;
+    }
     if let Some(fb) = fb() {
-        let spawned = scheduler::spawn("desktop", SpawnOpts { prio: 0, ..SpawnOpts::default() }, move || {
+        let spawned = scheduler::spawn("desktop", SpawnOpts { prio: 0, burst_ticks: 1, ..SpawnOpts::default() }, move || {
             DIRECT.store(false, Relaxed);
             desktop::run(fb);
             DIRECT.store(true, Relaxed);
         });
         if spawned.is_err() {
             kwarn!("desktop: could not start; the console stays on screen");
+            DIRECT.store(true, Relaxed);
         }
     }
+}
+
+/// The start-up screen shown while the kernel boots, until the desktop starts.
+fn draw_splash(fb: &Framebuffer) {
+    let (w, h) = (fb.width, fb.height);
+    let mut c = canvas::Canvas::new(w, h);
+    c.px.copy_from_slice(&desktop::wallpaper(w, h));
+    let fonts = font::Fonts::load();
+    let (cx, cy) = (w as i32 / 2, h as i32 / 2 - 30);
+    c.shadow(canvas::Rect::new(cx - 36, cy - 36, 72, 72), 20);
+    c.round(canvas::Rect::new(cx - 36, cy - 36, 72, 72), 20, desktop::ACCENT);
+    for (x0, y0, x1, y1) in [(-12.0, 14.0, -12.0, -14.0), (-12.0, -14.0, 12.0, 14.0), (12.0, 14.0, 12.0, -14.0)] {
+        c.line(cx as f32 + x0, cy as f32 + y0, cx as f32 + x1, cy as f32 + y1, 3.5, 0xFFFFFF);
+    }
+    let name = "NEXUS";
+    c.text(&fonts.bold, cx - canvas::Canvas::text_w(name) / 2, cy + 56, name, 0xF6F8FC);
+    let sub = "Starting the Rust kernel...";
+    c.text(&fonts.regular, cx - canvas::Canvas::text_w(sub) / 2, cy + 82, sub, 0xA7B2C8);
+    c.present(fb);
 }
 
 /// Paint one console cell straight onto the screen (only while no desktop
