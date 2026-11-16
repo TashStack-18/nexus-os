@@ -4,3 +4,4 @@ __pycache__/
 distro/out/
 distro/build/
 site/
+micro-os-x86.iso

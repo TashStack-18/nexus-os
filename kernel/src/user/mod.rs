@@ -50,8 +50,11 @@ pub const KILLED: isize = -9;
 pub const INTERRUPTED: isize = -130;
 
 const MAX_WRITE: usize = 1024;
-/// Usable RAM on QEMU virt (128 MiB) above OpenSBI's 2 MiB.
-const RAM: core::ops::Range<usize> = 0x8020_0000..0x8800_0000;
+/// Memory a `write` buffer may come from.
+#[cfg(target_arch = "riscv64")]
+const RAM: core::ops::Range<usize> = 0x8020_0000..0x8800_0000; // QEMU virt above OpenSBI
+#[cfg(target_arch = "x86_64")]
+const RAM: core::ops::Range<usize> = 0x10_0000..0x4000_0000; // PC: 1 MiB .. the 1 GiB the boot code maps
 
 fn name_of(nr: usize) -> &'static str {
     match nr {
@@ -155,7 +158,7 @@ pub fn spawn(name: &'static str, prog: UserProgram, arg: usize) -> Result<Tid, S
 /// Handle `ecall` from U-mode. Called by `trap_handler` with interrupts off;
 /// `tf.sepc` already points past the ecall.
 pub fn syscall(tf: &mut TrapFrame) {
-    let (nr, a0, a1) = (tf.regs[17], tf.regs[10], tf.regs[11]);
+    let (nr, a0, a1) = (tf.syscall_nr(), tf.arg0(), tf.arg1());
     let tid = scheduler::current_tid().unwrap_or(0);
     SYSCALLS.fetch_add(1, Relaxed);
     if scheduler::cancel_requested() {
@@ -178,7 +181,7 @@ pub fn syscall(tf: &mut TrapFrame) {
         _ => ENOSYS,
     };
     ktrace!("SYSCALL", "tid={} nr={} name={} ret={}", tid, nr, name_of(nr), ret);
-    tf.regs[10] = ret as usize;
+    tf.set_ret(ret as usize);
 }
 
 fn sys_write(ptr: usize, len: usize) -> isize {
@@ -222,9 +225,13 @@ pub fn kill_current(what: &str, sepc: usize, stval: usize) -> ! {
 #[inline(always)]
 fn ecall(nr: usize, a0: usize, a1: usize) -> isize {
     let ret: isize;
-    // SAFETY: ecall transfers control to the kernel's syscall handler, which
+    // SAFETY: ecall (int 0x80 on x86) transfers control to the kernel's syscall handler, which
     // returns a value in a0 and preserves every other register.
+    #[cfg(target_arch = "riscv64")]
     unsafe { asm!("ecall", inlateout("a0") a0 as isize => ret, in("a1") a1, in("a7") nr, options(nostack)) };
+    // x86-64: number in rax, arguments in rdi, rsi (as Linux), result in rax.
+    #[cfg(target_arch = "x86_64")]
+    unsafe { asm!("int 0x80", inlateout("rax") nr as isize => ret, in("rdi") a0, in("rsi") a1, options(nostack)) };
     ret
 }
 
@@ -259,7 +266,7 @@ fn uwrite_num(label: &str, v: u64) {
 
 /// `user hello [n]`: a well-behaved program using every system call.
 pub extern "C" fn prog_hello(rounds: usize) -> ! {
-    uwrite("hello from U-mode: this text reached the console through ecall -> write\n");
+    uwrite("hello from user mode: this text reached the console through a system call (write)\n");
     uwrite_num("  my pid (getpid):        ", ecall(SYS_GETPID, 0, 0) as u64);
     uwrite_num("  uptime ms (uptime_ms):  ", ecall(SYS_UPTIME_MS, 0, 0) as u64);
     for i in 1..=rounds {
@@ -272,11 +279,17 @@ pub extern "C" fn prog_hello(rounds: usize) -> ! {
 
 /// `user priv`: tries a privileged instruction; the kernel kills it.
 pub extern "C" fn prog_privileged(_: usize) -> ! {
+    #[cfg(target_arch = "riscv64")]
     uwrite("user program: trying to read sstatus (a supervisor register)...\n");
+    #[cfg(target_arch = "x86_64")]
+    uwrite("user program: trying to read cr3 (a ring-0 control register)...\n");
     let v: usize;
     // SAFETY (for the kernel): executing this in U-mode raises an
     // illegal-instruction exception, which is the point of the demo.
+    #[cfg(target_arch = "riscv64")]
     unsafe { asm!("csrr {}, sstatus", out(reg) v, options(nomem, nostack)) };
+    #[cfg(target_arch = "x86_64")]
+    unsafe { asm!("mov {}, cr3", out(reg) v, options(nomem, nostack)) };
     uwrite_num("  should never print; read ", v as u64);
     uexit(1)
 }

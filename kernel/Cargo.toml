@@ -2,7 +2,7 @@
 name = "microos"
 version = "0.1.0"
 edition = "2021"
-description = "Educational RISC-V Micro-OS kernel (CA-6)"
+description = "Educational Micro-OS kernel (CA-6) for RISC-V and x86-64"
 
 [dependencies]
 microos-core = { path = "../core" }

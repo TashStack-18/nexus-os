@@ -129,6 +129,13 @@ instruction kills only the offending program, `-EFAULT` for a bad pointer,
 the other programs survive. Paging is off, so this is privilege separation,
 not memory isolation (stated in the code and docs).
 
+## Bootable ISO for a PC (x86-64)
+
+The same kernel also runs on a PC without any emulator: `scripts/build_x86_iso.sh` builds
+`micro-os-x86.iso` (GRUB + Multiboot2). Boot it in VirtualBox or VMware (BIOS) and the Rust
+kernel runs the machine: VGA screen, PS/2 keyboard, PIT timer, ring-3 programs with `int 0x80`
+system calls. All 68 in-kernel checks pass on x86-64 too. See [docs/x86_port.md](docs/x86_port.md).
+
 ## Micro-OS Linux (`distro/`)
 
 A separate artifact for the extra requirements (network, laptop hardware,

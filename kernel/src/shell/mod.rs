@@ -77,7 +77,7 @@ fn banner() {
     } else {
         println!();
     }
-    println!("{PURPLE}[BOOT]{RESET} NEXUS \u{00b7} Micro-OS v{} (riscv64, S-mode, {})", env!("CARGO_PKG_VERSION"), drivers::sbi::impl_name());
+    println!("{PURPLE}[BOOT]{RESET} NEXUS \u{00b7} Micro-OS v{} ({}, {})", env!("CARGO_PKG_VERSION"), crate::arch::NAME, drivers::sbi::impl_name());
     println!("{PURPLE}[BOOT]{RESET} Kernel subsystems:");
     ok(format_args!("Trap vector installed (timer interrupts on)"));
     ok(format_args!("Kernel heap ready ({} MiB, first-fit free list)", h.capacity >> 20));
@@ -267,8 +267,8 @@ fn sysinfo() {
     let (ks, ke) = memory::kernel_image();
     let row = |k: &str, v: core::fmt::Arguments| println!("  {PURPLE}{:<12}{RESET} {}", k, v);
     row("os", format_args!("NEXUS (Micro-OS v{})", env!("CARGO_PKG_VERSION")));
-    row("machine", format_args!("QEMU virt, 1 RISC-V hart (riscv64gc), supervisor mode"));
-    row("firmware", format_args!("{} (SBI v{}.{})", drivers::sbi::impl_name(), major, minor));
+    row("machine", format_args!("{}", crate::arch::MACHINE));
+    row("firmware", format_args!("{} (interface v{}.{})", drivers::sbi::impl_name(), major, minor));
     row("kernel", format_args!("{:#x}..{:#x} ({} KiB)", ks, ke, (ke - ks) / 1024));
     row("heap", format_args!("{} MiB first-fit free list, {} B in use", h.capacity >> 20, h.bytes_in_use));
     row("timer", format_args!("{} us per tick, {} ticks so far", timer::tick_us(), timer::ticks()));

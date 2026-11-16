@@ -26,6 +26,19 @@ impl TrapFrame {
     pub fn from_user(&self) -> bool {
         self.sstatus & SSTATUS_SPP == 0
     }
+    /// System call number (a7) and arguments (a0, a1), as in Linux.
+    pub fn syscall_nr(&self) -> usize {
+        self.regs[17]
+    }
+    pub fn arg0(&self) -> usize {
+        self.regs[10]
+    }
+    pub fn arg1(&self) -> usize {
+        self.regs[11]
+    }
+    pub fn set_ret(&mut self, v: usize) {
+        self.regs[10] = v;
+    }
 }
 
 pub fn init() {

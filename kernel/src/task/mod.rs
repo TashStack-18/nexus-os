@@ -8,7 +8,10 @@ use microos_core::sched::{Leave, SchedInfo, Tid};
 
 pub use stack::{KernelStack, STACK_SIZE};
 
+#[cfg(target_arch = "riscv64")]
 core::arch::global_asm!(include_str!("switch.S"));
+#[cfg(target_arch = "x86_64")]
+core::arch::global_asm!(include_str!("switch_x86.S"));
 
 extern "C" {
     /// Save callee-saved registers into `save`, load them from `load`, and
@@ -17,6 +20,7 @@ extern "C" {
 }
 
 /// Callee-saved register state; layout must match `switch.S`.
+#[cfg(target_arch = "riscv64")]
 #[repr(C)]
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Context {
@@ -25,9 +29,39 @@ pub struct Context {
     pub s: [usize; 12],
 }
 
+#[cfg(target_arch = "riscv64")]
 impl Context {
     pub const fn zero() -> Self {
         Self { ra: 0, sp: 0, s: [0; 12] }
+    }
+    /// A context that starts at `entry` on a fresh stack whose top is `sp`.
+    pub fn start(entry: usize, sp: usize) -> Self {
+        Self { ra: entry, sp, s: [0; 12] }
+    }
+}
+
+/// Callee-saved register state; layout must match `switch_x86.S`.
+#[cfg(target_arch = "x86_64")]
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Context {
+    pub rip: usize,
+    pub rsp: usize,
+    pub rbx: usize,
+    pub rbp: usize,
+    pub r: [usize; 4],
+}
+
+#[cfg(target_arch = "x86_64")]
+impl Context {
+    pub const fn zero() -> Self {
+        Self { rip: 0, rsp: 0, rbx: 0, rbp: 0, r: [0; 4] }
+    }
+    /// A context that starts at `entry` on a fresh stack whose top is `sp`.
+    /// The stack is set up as if `entry` had just been called (rsp + 8 is
+    /// 16-byte aligned), which the System V ABI requires at function entry.
+    pub fn start(entry: usize, sp: usize) -> Self {
+        Self { rip: entry, rsp: (sp & !15) - 8, rbx: 0, rbp: 0, r: [0; 4] }
     }
 }
 
@@ -102,7 +136,7 @@ impl Task {
     /// A fresh task whose first dispatch "returns" into `trampoline` on its
     /// own stack.
     pub fn new(tid: Tid, name: &'static str, prio: u8, entry: Entry, stack: KernelStack, trampoline: usize) -> Self {
-        let ctx = Context { ra: trampoline, sp: stack.top(), s: [0; 12] };
+        let ctx = Context::start(trampoline, stack.top());
         Self {
             tid,
             name,

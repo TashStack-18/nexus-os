@@ -8,8 +8,10 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use crate::{arch, drivers::qemu_exit, kernel::console, scheduler, timer};
 
 pub const PANIC_EXIT_CODE: u32 = 101;
-const RAM_START: usize = 0x8000_0000;
-const RAM_END: usize = 0x8800_0000;
+#[cfg(target_arch = "riscv64")]
+const RAM: core::ops::Range<usize> = 0x8000_0000..0x8800_0000;
+#[cfg(target_arch = "x86_64")]
+const RAM: core::ops::Range<usize> = 0x10_0000..0x4000_0000;
 
 static PANICKING: AtomicBool = AtomicBool::new(false);
 
@@ -39,17 +41,21 @@ fn panic(info: &PanicInfo) -> ! {
     qemu_exit::exit(PANIC_EXIT_CODE)
 }
 
-/// Walk the frame-pointer chain. With `-C force-frame-pointers`, each frame
-/// stores the return address at `fp - 8` and the caller's fp at `fp - 16`.
+/// Walk the frame-pointer chain (`-C force-frame-pointers`). RISC-V stores
+/// the return address at `fp - 8` and the caller's fp at `fp - 16`; x86-64
+/// stores the caller's rbp at `[rbp]` and the return address at `rbp + 8`.
 fn backtrace(w: &mut impl Write) {
     let mut fp = arch::read_fp();
     for depth in 0..24 {
-        if !(RAM_START + 16..RAM_END).contains(&fp) || fp % 8 != 0 {
+        if !(RAM.start + 16..RAM.end - 16).contains(&fp) || fp % 8 != 0 {
             break;
         }
         // SAFETY: fp was range- and alignment-checked against RAM above, and
         // reads have no side effects; a bogus chain just ends the walk.
+        #[cfg(target_arch = "riscv64")]
         let (ra, prev) = unsafe { (*((fp - 8) as *const usize), *((fp - 16) as *const usize)) };
+        #[cfg(target_arch = "x86_64")]
+        let (ra, prev) = unsafe { (*((fp + 8) as *const usize), *(fp as *const usize)) };
         if ra == 0 {
             break;
         }

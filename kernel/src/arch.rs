@@ -6,6 +6,10 @@
 
 use core::arch::asm;
 
+/// How this port describes itself in banners and `sysinfo`.
+pub const NAME: &str = "riscv64, S-mode";
+pub const MACHINE: &str = "QEMU virt, 1 RISC-V hart (riscv64gc), supervisor mode";
+
 pub const SSTATUS_SIE: usize = 1 << 1;
 pub const SIE_STIE: usize = 1 << 5;
 pub const SCAUSE_INTERRUPT: usize = 1 << 63;

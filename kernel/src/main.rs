@@ -1,6 +1,10 @@
-//! Micro-OS: an educational RISC-V kernel in Rust (CA-6).
+//! Micro-OS: an educational kernel in Rust (CA-6), for RISC-V and x86-64.
 //!
-//! Boot path: OpenSBI (M-mode) → `_start` (boot/entry.S) → `kmain` (S-mode).
+//! Boot path, RISC-V: OpenSBI (M-mode) → `_start` (boot/entry.S) → `kmain` (S-mode).
+//! Boot path, x86-64: GRUB (Multiboot2) → `_start` (x86/boot.S, 32-bit) →
+//! long mode → `kmain` (ring 0). Only the hardware modules differ between
+//! the two (`#[cfg_attr(target_arch = "x86_64", path = ...)]` below); the
+//! scheduler, sync, memory, user mode, shell and tests are shared.
 //! `kmain` initialises each layer in order, then runs the scenarios selected
 //! on the kernel command line and exits QEMU with the number of failed checks.
 
@@ -12,8 +16,11 @@ extern crate alloc;
 #[macro_use]
 mod kernel;
 
+#[cfg_attr(target_arch = "x86_64", path = "x86/arch.rs")]
 mod arch;
+#[cfg_attr(target_arch = "x86_64", path = "x86/boot.rs")]
 mod boot;
+#[cfg_attr(target_arch = "x86_64", path = "x86/drivers/mod.rs")]
 mod drivers;
 mod memory;
 mod programs;
@@ -23,7 +30,9 @@ mod shell;
 mod sync;
 mod sys;
 mod task;
+#[cfg_attr(target_arch = "x86_64", path = "x86/timer.rs")]
 mod timer;
+#[cfg_attr(target_arch = "x86_64", path = "x86/trap.rs")]
 mod trap;
 mod user;
 
@@ -31,14 +40,21 @@ use drivers::{qemu_exit, sbi};
 use kernel::console::{self, Level};
 
 #[no_mangle]
-pub extern "C" fn kmain(hartid: usize, dtb: usize) -> ! {
+pub extern "C" fn kmain(a0: usize, a1: usize) -> ! {
     println!();
-    kinfo!("Micro-OS v{} booting on hart {} (riscv64, S-mode)", env!("CARGO_PKG_VERSION"), hartid);
+    #[cfg(target_arch = "riscv64")]
+    let (hartid, dtb) = (a0, a1);
+    #[cfg(target_arch = "x86_64")]
+    let (hartid, dtb) = (0usize, a1); // a0 = Multiboot2 magic, a1 = boot information
+    kinfo!("Micro-OS v{} booting on hart {} ({})", env!("CARGO_PKG_VERSION"), hartid, arch::NAME);
     ktrace!("BOOT", "stage=entry hart={} dtb={:#x}", hartid, dtb);
     let (major, minor) = sbi::spec_version();
-    kinfo!("firmware: {} implementing SBI v{}.{}", sbi::impl_name(), major, minor);
+    kinfo!("firmware: {} (interface v{}.{})", sbi::impl_name(), major, minor);
 
+    #[cfg(target_arch = "riscv64")]
     let args = boot::boot_args(dtb);
+    #[cfg(target_arch = "x86_64")]
+    let args = boot::boot_args(a0, a1);
     if let Some(level) = args.get("log").and_then(Level::parse) {
         console::set_level(level);
     }
