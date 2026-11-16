@@ -70,10 +70,10 @@ pub fn upgrade(fb: Framebuffer) -> Framebuffer {
         write(ENABLE, 0);
         write(XRES, fb.width as u16);
         write(YRES, fb.height as u16);
-        write(BPP, fb.bpp as u16);
+        write(BPP, 32);
         write(ENABLE, 0x01 | 0x40);
         return fb;
     }
     let vw = read(VIRT_WIDTH) as usize;
-    Framebuffer { addr: fb.addr, pitch: vw.max(w as usize) * 4, width: w as usize, height: h as usize, bpp: 32 }
+    Framebuffer { addr: fb.addr, pitch: vw.max(w as usize) * 4, width: w as usize, height: h as usize }
 }

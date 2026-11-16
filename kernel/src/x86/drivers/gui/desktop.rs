@@ -117,7 +117,6 @@ pub enum Act {
     AddJobs(Dist),
     NexusMenu,
     Shutdown,
-    Lock,
 }
 
 pub struct Hit {
@@ -155,8 +154,6 @@ pub struct Desktop {
     pub hits: Vec<Hit>,
     clock_mask: Option<(u8, u8, Mask)>,
     pub dirty: bool,
-    /// The lock screen is showing (the system boots into it).
-    pub locked: bool,
 }
 
 pub fn run(fb: Framebuffer) {
@@ -183,7 +180,6 @@ pub fn run(fb: Framebuffer) {
         hits: Vec::new(),
         clock_mask: None,
         dirty: true,
-        locked: true,
     };
     for (i, app) in App::DOCK.into_iter().enumerate() {
         let (ww, wh) = app.size();
@@ -294,22 +290,6 @@ impl Desktop {
     // -------------------------------------------------------------- input
 
     fn event(&mut self, ev: Event) {
-        if self.locked {
-            match ev {
-                Event::Key(k) if k == 13 || k == 10 || k == 32 || k == 0x1B => self.unlock(),
-                Event::Key(_) => {}
-                Event::Mouse { dx, dy, buttons } => {
-                    self.mx = (self.mx + dx).clamp(0, self.w() - 1);
-                    self.my = (self.my + dy).clamp(0, self.h() - 1);
-                    self.dirty = true;
-                    if buttons & 1 != 0 && self.buttons & 1 == 0 {
-                        self.unlock();
-                    }
-                    self.buttons = buttons;
-                }
-            }
-            return;
-        }
         match ev {
             Event::Key(k) => {
                 if k == 0x1B && self.menu_open {
@@ -345,11 +325,6 @@ impl Desktop {
         }
     }
 
-    fn unlock(&mut self) {
-        self.locked = false;
-        self.dirty = true;
-    }
-
     fn click(&mut self, x: i32, y: i32) {
         self.dirty = true;
         let was_menu = self.menu_open;
@@ -374,7 +349,6 @@ impl Desktop {
             Some(Act::Close(app)) => self.close(app),
             Some(Act::Min(app)) => self.minimize(app),
             Some(Act::NexusMenu) => self.menu_open = !was_menu,
-            Some(Act::Lock) => self.locked = true,
             Some(Act::Shutdown) => {
                 self.open(App::Terminal);
                 super::push_str("exit\r");
@@ -527,12 +501,6 @@ impl Desktop {
     fn render(&mut self) {
         self.hits.clear();
         self.c.px.copy_from_slice(&self.wallpaper);
-        if self.locked {
-            self.draw_big_clock();
-            self.draw_lock();
-            self.draw_pointer();
-            return;
-        }
         self.draw_big_clock();
         self.draw_widgets();
         let order: Vec<App> = self.wins.iter().filter(|w| w.open && !w.minimized).map(|w| w.app).collect();
@@ -546,22 +514,6 @@ impl Desktop {
             self.draw_nexus_menu();
         }
         self.draw_pointer();
-    }
-
-    fn draw_lock(&mut self) {
-        let (cx, h) = (self.w() / 2, self.h());
-        let cy = h * 62 / 100;
-        // account badge
-        self.c.disc(cx, cy, 46, 0x1B2748);
-        self.c.disc(cx, cy, 43, ACCENT);
-        self.c.disc(cx, cy - 12, 14, 0xFFFFFF);
-        self.c.rrect(Rect::new(cx - 24, cy + 8, 48, 26), 13, 0xFFFFFF, 256);
-        self.txtb_c(cx, cy + 62, "NEXUS user", WHITE);
-        let pill = Rect::new(cx - 170, cy + 100, 340, 40);
-        self.c.rrect(pill, 20, 0xFFFFFF, 34);
-        self.c.outline(pill, 20, 0xFFFFFF, 60);
-        self.txt_c(cx, pill.y + 12, "Click or press Enter to unlock", WHITE);
-        self.txt_c(cx, h - 40, "Rust Micro-OS · x86-64 · scheduler lab inside", MUTED);
     }
 
     fn draw_big_clock(&mut self) {
@@ -780,11 +732,11 @@ impl Desktop {
     }
 
     fn draw_nexus_menu(&mut self) {
-        let r = Rect::new(8, BAR + 4, 232, 136);
+        let r = Rect::new(8, BAR + 4, 232, 96);
         self.c.shadow(r, 12);
         self.c.rrect(r, 12, 0x12182B, 238);
         self.c.outline(r, 12, 0xFFFFFF, 36);
-        let items: [(&str, Act); 3] = [("About NEXUS", Act::Open(App::Info)), ("Lock screen", Act::Lock), ("Shut down", Act::Shutdown)];
+        let items: [(&str, Act); 2] = [("About NEXUS", Act::Open(App::Info)), ("Shut down", Act::Shutdown)];
         for (i, (label, act)) in items.into_iter().enumerate() {
             let ir = Rect::new(r.x + 8, r.y + 8 + i as i32 * 40, r.w - 16, 36);
             if ir.contains(self.mx, self.my) {

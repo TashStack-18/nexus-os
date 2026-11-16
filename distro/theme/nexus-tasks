@@ -24,24 +24,24 @@ gi.require_version("Gdk", "3.0")
 from gi.repository import Gtk, Gdk, GLib, Pango
 
 DARK_CSS = b"""
-window { background-color: #0b1020; color: #e8edf8; font-family: 'DejaVu Sans', sans-serif; }
-notebook > header { background-color: #080c18; border-bottom: 1px solid #1a2542; }
-notebook > header > tabs > tab { padding: 8px 18px; color: #8a9bb8; font-weight: bold; }
-notebook > header > tabs > tab:checked { color: #ffffff; border-bottom: 2px solid #5b8cff; background-color: #12182b; }
-.card { background-color: #12182b; border-radius: 8px; border: 1px solid #1c2744; padding: 12px; }
-treeview { background-color: #0e1424; color: #d0daf0; font-size: 10pt; }
-treeview:selected { background-color: #2b3d6b; color: #ffffff; }
-button { background: #1c2744; color: #e8edf8; border-radius: 6px; border: 1px solid #293860; padding: 5px 12px; font-weight: bold; }
-button:hover { background: #26365e; border-color: #5b8cff; }
-button.danger { background: #bd2130; color: #ffffff; border-color: #dc3545; }
-button.danger:hover { background: #dc3545; }
-button.primary { background: #3366ff; color: #ffffff; border-color: #4d79ff; }
-label.title { font-size: 15pt; font-weight: bold; color: #ffffff; }
-label.section-header { font-size: 11pt; font-weight: bold; color: #5b8cff; }
-label.stat-val { font-size: 14pt; font-weight: bold; color: #ffffff; }
-label.stat-lbl { font-size: 9pt; color: #8a9bb8; }
-progressbar > trough { background-color: #1c2744; border-radius: 4px; }
-progressbar > trough > progress { background-color: #3366ff; border-radius: 4px; }
+window { background-color: #141218; color: #fdf2f6; font-family: 'DejaVu Sans', sans-serif; }
+notebook > header { background-color: #18151f; border-bottom: 1px solid #362939; }
+notebook > header > tabs > tab { padding: 8px 18px; color: #b89da9; font-weight: bold; }
+notebook > header > tabs > tab:checked { color: #ffffff; border-bottom: 2px solid #d65d8c; background-color: #241d2c; }
+.card { background-color: #1e1924; border-radius: 8px; border: 1px solid #362939; padding: 12px; }
+treeview { background-color: #16131c; color: #ecd6df; font-size: 10pt; }
+treeview:selected { background-color: #4a3548; color: #ffffff; }
+button { background: #2a202e; color: #fdf2f6; border-radius: 6px; border: 1px solid #4a384e; padding: 5px 12px; font-weight: bold; }
+button:hover { background: #3b2d41; border-color: #d65d8c; }
+button.danger { background: #96283b; color: #ffffff; border-color: #bd334b; }
+button.danger:hover { background: #bd334b; }
+button.primary { background: #c95d82; color: #ffffff; border-color: #e07297; }
+label.title { font-size: 15pt; font-weight: bold; color: #fdf2f6; }
+label.section-header { font-size: 11pt; font-weight: bold; color: #f2a7bf; }
+label.stat-val { font-size: 14pt; font-weight: bold; color: #fdf2f6; }
+label.stat-lbl { font-size: 9pt; color: #c9899e; }
+progressbar > trough { background-color: #2a202e; border-radius: 4px; }
+progressbar > trough > progress { background-color: #c95d82; border-radius: 4px; }
 """
 
 def read_cpu_stat():

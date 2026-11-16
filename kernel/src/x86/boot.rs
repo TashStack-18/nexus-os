@@ -19,7 +19,6 @@ pub struct Framebuffer {
     pub pitch: usize,
     pub width: usize,
     pub height: usize,
-    pub bpp: u8,
 }
 
 /// Address and size of the first tag of type `ty`, if present.
@@ -80,5 +79,5 @@ pub fn framebuffer(magic: usize, info: usize) -> Option<Framebuffer> {
     };
     // The boot code maps the first 4 GiB; the screen must lie inside it.
     let end = addr.checked_add(pitch.checked_mul(height)?)?;
-    (kind == 1 && (bpp == 32 || bpp == 24) && width >= 640 && height >= 480 && end <= 0x1_0000_0000).then_some(Framebuffer { addr, pitch, width, height, bpp })
+    (kind == 1 && bpp == 32 && width >= 640 && height >= 480 && end <= 0x1_0000_0000).then_some(Framebuffer { addr, pitch, width, height })
 }

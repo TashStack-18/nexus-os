@@ -12,7 +12,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(dirname "$HERE")"
 IMG="$HERE/out/microos-s6.img"
 WORK="$HERE/build/iso"
-ISO="${ISO:-$HERE/out/nexus-os-v2.iso}"
+ISO="${ISO:-$HERE/out/nexus-os-final-v2.iso}"
 ELF_RISCV="$ROOT/kernel/target/riscv64gc-unknown-none-elf/release/microos"
 ELF_X86="$ROOT/kernel/target/x86_64-unknown-none/release/microos"
 PROXY="http://127.0.0.1:3142"   # apt-cacher-ng
@@ -99,6 +99,11 @@ for k, v in mod.EXAMPLES.items():
     with open(os.path.join(p_dir, 'src', 'main.rs'), 'w') as f: f.write(v['main'])
 " 2>/dev/null || true
 chroot "$R" chown -R student:student /home/student/nexus_rust_projects 2>/dev/null || true
+if [ -d "$R/home/tashvi" ]; then
+    mkdir -p "$R/home/tashvi/nexus_rust_projects"
+    cp -r "$H/nexus_rust_projects/." "$R/home/tashvi/nexus_rust_projects/"
+    chroot "$R" chown -R tashvi:tashvi /home/tashvi/nexus_rust_projects 2>/dev/null || true
+fi
 
 log "finalizing live system overlay configuration"
 printf '# Live system: root overlay in RAM\n' > "$R/etc/fstab"
@@ -129,7 +134,7 @@ set gfxpayload=keep
 terminal_output gfxterm
 
 menuentry "NEXUS OS — Live Desktop (Rust Studio, Lab & Tasks)" {
-    linux /live/vmlinuz boot=live quiet console=ttyS0,115200 console=tty0
+    linux /live/vmlinuz boot=live quiet video=1920x1080 console=ttyS0,115200 console=tty0
     initrd /live/initrd.img
 }
 
@@ -171,6 +176,4 @@ if [ -d "/mnt/c/Users/Tashvi/Downloads" ]; then
     log "mirroring to /mnt/c/Users/Tashvi/Downloads/$(basename "$ISO")"
     cp "$ISO" "/mnt/c/Users/Tashvi/Downloads/$(basename "$ISO")"
     cp "$ISO.sha256" "/mnt/c/Users/Tashvi/Downloads/$(basename "$ISO").sha256"
-    cp "$ISO" /mnt/c/Users/Tashvi/Downloads/nexus-os.iso
-    cp "$ISO.sha256" /mnt/c/Users/Tashvi/Downloads/nexus-os.iso.sha256
 fi

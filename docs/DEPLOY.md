@@ -1,7 +1,8 @@
 # NEXUS OS — Deployment, Demonstration & Verification Guide
 
 **Author**: Tashvi Adhlakha (Registration: 25BTRCL271)  
-**Deliverable**: `nexus-os.iso` (Unified Hybrid Bootable Operating System)  
+**Deliverable**: `nexus-os-v2.iso` & `nexus-os.iso` (Unified Hybrid Bootable Operating System)  
+**Backup**: `nexus-os-backup.iso` (Preserved original build)  
 **Target Tracks**: Track A (Scheduler Engineering) & Track G (Research-to-Kernel Evaluation)  
 **CA-6 Academic Compliance**: 10/10 Core Educational Micro-OS Mechanisms Verified (68/68 Automated Tests Passing)
 
@@ -9,12 +10,12 @@
 
 ## 1. Executive Summary & Architecture
 
-NEXUS OS unifies two operating system personalities into **one single bootable ISO (`nexus-os.iso`)**:
+NEXUS OS unifies two operating system personalities into **one single bootable ISO (`nexus-os.iso` / `nexus-os-v2.iso`)**:
 
 ```
                        ┌─────────────────────────────────────────────────────────────┐
                        │                   NEXUS OS HYBRID ISO                       │
-                       │                     (nexus-os.iso)                          │
+                       │               (nexus-os.iso / nexus-os-v2.iso)              │
                        └──────────────────────────────┬──────────────────────────────┘
                                                       │
                        ┌──────────────────────────────┴──────────────────────────────┐
@@ -26,16 +27,22 @@ NEXUS OS unifies two operating system personalities into **one single bootable I
              │     NEXUS OS LIVE DESKTOP       │     │   NEXUS MICRO-OS RUST KERNEL  │
              │   (Debian 13 Trixie + Xfce4)    │     │       (Bare-Metal x86-64)     │
              ├─────────────────────────────────┤     ├───────────────────────────────┤
-             │ • Smooth composited dark theme  │     │ • Direct hardware boot <0.2s  │
-             │ • Rust Development Studio       │     │ • Ring 0 privilege level      │
-             │ • NEXUS Lab (Scheduler/Research)│     │ • Real PIT timer & interrupts │
-             │ • Real-time Task Manager        │     │ • Direct VGA/Bochs VBE display│
-             │ • Full cargo/rustc toolchain    │     │ • 68/68 Academic checks (TCs) │
-             │ • NetworkManager, APT, Firmware │     │ • RR, SJF, MLFQ policies      │
+             │ • Clean minimal modern desktop  │     │ • Direct hardware boot <0.2s  │
+             │ • Slim top panel & centered dock│     │ • Ring 0 privilege level      │
+             │ • Full-screen PAM lock screen   │     │ • Real PIT timer & interrupts │
+             │ • Window lifecycle & dock sync  │     │ • Direct VGA/Bochs VBE display│
+             │ • Rust Development Studio       │     │ • 68/68 Academic checks (TCs) │
+             │ • NEXUS Lab (Scheduler/Research)│     │ • RR, SJF, MLFQ policies      │
+             │ • Real-time Task Manager        │     │ • Immediate-mode kernel shell │
              └─────────────────────────────────┘     └───────────────────────────────┘
 ```
 
-1. **NEXUS Live Desktop**: A high-performance, responsive live environment running on Debian 13 with lightweight Xfce4, Xfwm4 compositing (no black boxes or widget tearing), balanced transparent Conky widgets, and three custom GTK3 applications:
+1. **NEXUS Live Desktop**: A high-performance, responsive live environment running on Debian 13 with lightweight Xfce4, Xfwm4 hardware compositing, a minimal modern interface, and three custom GTK3 applications:
+   - **Clean Minimal Desktop**: The wallpaper is 100% uncluttered with zero permanent dashboard cards or research widgets on the screen.
+   - **Slim Top Panel (28px)**: Features the NEXUS menu, centered digital clock and date (`%a, %b %-d   %H:%M`), system tray indicators (Wi-Fi, Ethernet, volume, power), and quick Lock/Power actions.
+   - **Centered Bottom Application Dock (52px)**: Combines pinned launchers (Terminal, Rust Studio, NEXUS Lab, Task Manager, Files, Micro-OS Kernel) with an integrated active/minimized window tasklist. Clicking a running app restores or minimizes it seamlessly.
+   - **Authentic Full-Screen Lock Screen**: Uses the real Linux PAM authentication system with the custom NEXUS lock background, large digital clock, date, branding, user avatar (`student`), password prompt (`microos`), 5-minute inactivity lock, manual lock menu item, and `Super + L` shortcut.
+   - **Robust Window Lifecycle**: Full support for Minimize, Maximize, Restore, and Close (`O|HMC` layout) with clean `os._exit(0)` and process cleanup to eliminate blank windows and freezes.
    - **Rust Development Studio (`nexus-studio`)**: Complete IDE for writing, compiling (`cargo build` / `rustc`), diagnosing, and running Rust programs with pre-loaded academic samples.
    - **NEXUS Lab (`nexus-lab`)**: Unified 3-in-1 research workstation containing Scheduler Lab (FCFS, SJF, SRTF, HRRN, RR q=2, RR q=8, and Linux EEVDF comparative analysis), CA-4 Research Findings (hypotheses H1–H3 with bimodal overload dataset), and Programs Launcher.
    - **Task Manager (`nexus-tasks`)**: Live system monitor reading real `/proc` process metrics, memory usage, CPU gauges, and process termination (`kill`).
@@ -45,9 +52,17 @@ NEXUS OS unifies two operating system personalities into **one single bootable I
 
 ## 2. ISO Verification & Placement
 
-The final ISO image and its cryptographic hash are located at:
-- **Build Output**: `distro/out/nexus-os.iso`
-- **Windows Downloads**: `C:\Users\Tashvi\Downloads\nexus-os.iso`
+The ISO images and cryptographic hashes are located at:
+- **Primary Deliverable**: `C:\Users\Tashvi\Downloads\nexus-os-v2.iso` (also mirrored to `nexus-os.iso`)
+- **Preserved Backup**: `C:\Users\Tashvi\Downloads\nexus-os-backup.iso`
+- **WSL Build Path**: `/root/micro-os/distro/out/nexus-os-v2.iso`
+- **SHA-256 Checksum**: `C:\Users\Tashvi\Downloads\nexus-os-v2.iso.sha256`
+
+To verify the integrity of the ISO on Windows:
+
+```powershell
+Get-FileHash C:\Users\Tashvi\Downloads\nexus-os-v2.iso -Algorithm SHA256
+```
 - **SHA-256 Checksum**: `C:\Users\Tashvi\Downloads\nexus-os.iso.sha256`
 
 To verify the integrity of the ISO on Windows:
