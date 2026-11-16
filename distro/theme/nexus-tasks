@@ -74,6 +74,9 @@ class NexusTaskManager(Gtk.Window):
         super().__init__(title="NEXUS Task Manager & System Monitor")
         self.set_default_size(1080, 720)
         self.set_position(Gtk.WindowPosition.CENTER)
+        self.set_wmclass("nexus-tasks", "Nexus-tasks")
+        self.set_role("nexus-tasks")
+        self.connect("delete-event", self._on_delete_event)
         self.connect("destroy", self._on_destroy)
 
         self.running = True
@@ -83,6 +86,21 @@ class NexusTaskManager(Gtk.Window):
         self._setup_style()
         self._init_ui()
         self._start_refresh_thread()
+
+    def _on_delete_event(self, widget, event):
+        self._cleanup_and_quit()
+        return False
+
+    def _on_destroy(self, _):
+        self._cleanup_and_quit()
+
+    def _cleanup_and_quit(self):
+        self.running = False
+        try:
+            Gtk.main_quit()
+        except Exception:
+            pass
+        os._exit(0)
 
     def _setup_style(self):
         provider = Gtk.CssProvider()
@@ -441,9 +459,12 @@ class NexusTaskManager(Gtk.Window):
         Gtk.main_quit()
 
 def main():
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    signal.signal(signal.SIGTERM, lambda *_: os._exit(0))
     win = NexusTaskManager()
     win.show_all()
     Gtk.main()
+    os._exit(0)
 
 if __name__ == "__main__":
     main()

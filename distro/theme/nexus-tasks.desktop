@@ -8,3 +8,4 @@ Icon=utilities-system-monitor
 Categories=System;Monitor;
 Terminal=false
 StartupNotify=true
+StartupWMClass=nexus-tasks

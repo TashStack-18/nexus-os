@@ -8,3 +8,4 @@ Icon=applications-development
 Categories=Development;IDE;
 Terminal=false
 StartupNotify=true
+StartupWMClass=nexus-studio

@@ -298,7 +298,10 @@ class RustStudioApp(Gtk.Window):
         super().__init__(title="NEXUS Rust Development Studio")
         self.set_default_size(1180, 780)
         self.set_position(Gtk.WindowPosition.CENTER)
-        self.connect("destroy", Gtk.main_quit)
+        self.set_wmclass("nexus-studio", "Nexus-studio")
+        self.set_role("nexus-studio")
+        self.connect("delete-event", self._on_delete_event)
+        self.connect("destroy", self._on_destroy)
 
         self.active_project_dir = None
         self.active_file_path = None
@@ -308,6 +311,25 @@ class RustStudioApp(Gtk.Window):
         self._setup_style()
         self._init_ui()
         self._load_initial_project()
+
+    def _on_delete_event(self, widget, event):
+        self._cleanup_and_quit()
+        return False
+
+    def _on_destroy(self, widget):
+        self._cleanup_and_quit()
+
+    def _cleanup_and_quit(self):
+        if self.active_process and self.active_process.poll() is None:
+            try:
+                self.active_process.kill()
+            except Exception:
+                pass
+        try:
+            Gtk.main_quit()
+        except Exception:
+            pass
+        os._exit(0)
 
     def _setup_style(self):
         provider = Gtk.CssProvider()
@@ -973,9 +995,12 @@ class RustStudioApp(Gtk.Window):
 
 
 def main():
+    signal.signal(signal.SIGINT, signal.SIG_DFL)
+    signal.signal(signal.SIGTERM, lambda *_: os._exit(0))
     app = RustStudioApp()
     app.show_all()
     Gtk.main()
+    os._exit(0)
 
 
 if __name__ == "__main__":

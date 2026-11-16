@@ -12,7 +12,7 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(dirname "$HERE")"
 IMG="$HERE/out/microos-s6.img"
 WORK="$HERE/build/iso"
-ISO="${ISO:-$HERE/out/nexus-os.iso}"
+ISO="${ISO:-$HERE/out/nexus-os-v2.iso}"
 ELF_RISCV="$ROOT/kernel/target/riscv64gc-unknown-none-elf/release/microos"
 ELF_X86="$ROOT/kernel/target/x86_64-unknown-none/release/microos"
 PROXY="http://127.0.0.1:3142"   # apt-cacher-ng
@@ -168,7 +168,9 @@ sha256sum "$ISO" | tee "$ISO.sha256"
 
 # Mirror to Windows Downloads folder for convenient VirtualBox mounting
 if [ -d "/mnt/c/Users/Tashvi/Downloads" ]; then
-    log "mirroring to /mnt/c/Users/Tashvi/Downloads/nexus-os.iso"
+    log "mirroring to /mnt/c/Users/Tashvi/Downloads/$(basename "$ISO")"
+    cp "$ISO" "/mnt/c/Users/Tashvi/Downloads/$(basename "$ISO")"
+    cp "$ISO.sha256" "/mnt/c/Users/Tashvi/Downloads/$(basename "$ISO").sha256"
     cp "$ISO" /mnt/c/Users/Tashvi/Downloads/nexus-os.iso
     cp "$ISO.sha256" /mnt/c/Users/Tashvi/Downloads/nexus-os.iso.sha256
 fi
