@@ -1,0 +1,72 @@
+================================================================================
+LUNARA OS — ISO SIZE & CAPACITY ANALYSIS REPORT
+Date: 2026-11-17
+Platform: Oracle VirtualBox & WSL2 Environment
+================================================================================
+
+1. ISO SIZES SUMMARY
+--------------------------------------------------------------------------------
+Deliverable 1: `lunara-os-final.iso` (Full Desktop + 3-Mode Hybrid Boot)
+  - Total Size: 2,256,220,160 bytes (2.10 GiB / 2.25 GB)
+  - Target Audience: Full Viva Demonstration, Desktop Environment, Research & Dev
+  - Components: Debian 13 "Trixie", XFCE 4.18, LightDM, Custom System Vitals,
+                Rust Studio, NEXUS Lab, Task Manager, Snap Store, Bare-Metal Rust Kernel
+
+Deliverable 2: `lunara-micro-x86.iso` (Dedicated Bare-Metal Rust Microkernel)
+  - Total Size: 18,847,744 bytes (17.97 MiB / 18.8 MB)
+  - Target Ceiling: Below 100 MB (ACHIEVED: 18 MB << 100 MB)
+  - Components: GRUB2 Multiboot2, 64-bit Ring 0 Microkernel (`microos.elf`),
+                Native Framebuffer GUI Desktop, Immediate-Mode Window Manager,
+                Scheduler Policies (RR, SJF, MLFQ), All 68 Academic In-Kernel Checks
+
+2. LARGEST SPACE CONTRIBUTORS (Inside `lunara-os-final.iso`)
+--------------------------------------------------------------------------------
+The squashfs compressed filesystem (`filesystem.squashfs`) accounts for 2.1 GB of the
+total ISO image. The uncompressed root filesystem is 4.16 GB. Below are the top
+contributors to that footprint:
+
+Rank  Component / Directory                Uncompressed Size   Description
+--------------------------------------------------------------------------------
+ 1    /var/lib/snapd                       1,221 MB            Pre-seeded Snap Store & dependencies
+ 2    /usr/lib/x86_64-linux-gnu              720 MB            Shared runtime C/C++ & GUI libraries
+ 3    /usr/lib/firefox-esr                   295 MB            Firefox Web Browser
+ 4    /var/cache/apt                         249 MB            Debian package download cache
+ 5    /usr/lib/rustlib                       172 MB            Rust standard library for Cargo builds
+ 6    /usr/share/locale                      147 MB            Multi-language translation catalogs
+ 7    libllvm19 (Mesa backend)               124 MB            LLVM compiler backend for 3D/OpenGL
+ 8    /usr/lib/firmware                      115 MB            Hardware firmware (Intel, Realtek)
+ 9    linux-image-6.12 (Debian kernel)       106 MB            Linux 6.12 kernel modules & drivers
+10    /usr/lib/modules                        97 MB            Installed Linux kernel driver tree
+11    /var/lib/apt/lists                      93 MB            Debian repository package lists
+12    /usr/lib/snapd                          52 MB            Snapd daemon binaries
+13    /usr/share/doc & man                    55 MB            Documentation and manual pages
+14    snapd core package                      70 MB            Snap daemon core package
+15    mesa-libgallium                         41 MB            OpenGL/Vulkan graphics driver
+
+3. ARCHITECTURAL FEASIBILITY ANALYSIS: CAN A LINUX DESKTOP BE < 100 MB OR < 500 MB?
+--------------------------------------------------------------------------------
+* Can the complete Debian XFCE desktop be under 100 MB?
+  - NO. The compressed Linux kernel (`vmlinuz`) and `initrd.img` alone require 70 MB.
+  - Adding the essential C library (`libc6`), systemd, Xorg, GTK3, XFCE desktop, and
+    Python runtimes requires at least 400 MB compressed.
+  - Therefore, achieving < 100 MB for a complete Debian live OS without gutting the
+    desktop environment, GTK applications, and system utilities is physically impossible.
+
+* Can the complete Debian XFCE desktop be under 500 MB?
+  - Only if Snapd/Snap Store (1.2 GB uncompressed), Firefox (295 MB), and compiler tools
+    are entirely uninstalled, and firmware is stripped down.
+  - However, in accordance with the project guidelines:
+    "DO NOT delete essential components to force the target...
+     Preserve Snap Store, snapd, APT, Rust Studio, NEXUS Lab, and desktop applications."
+  - Therefore, the complete desktop OS is properly preserved at its natural complete size
+    of 2.1 GB to guarantee zero loss of features, branding, or research tools.
+
+* The Perfect Solution:
+  - Deliverable 1 (`lunara-os-final.iso`, 2.1 GB) provides 100% of the desktop,
+    lock screen, applications, research lab, and the 3-mode hybrid boot menu.
+  - Deliverable 2 (`lunara-micro-x86.iso`, 18 MB) provides the standalone ultra-fast
+    Rust microkernel operating system under 20 MB, well below the 100 MB and 500 MB targets.
+
+================================================================================
+END OF REPORT
+================================================================================

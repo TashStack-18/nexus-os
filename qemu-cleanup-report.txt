@@ -1,0 +1,70 @@
+================================================================================
+LUNARA OS — QEMU INVESTIGATION, ATTACHMENTS & CLEANUP REPORT
+Date: 2026-11-17
+Platform: Oracle VirtualBox & WSL2 Environment
+================================================================================
+
+1. EXECUTIVE SUMMARY
+--------------------------------------------------------------------------------
+A forensic audit was performed across the entire repository, WSL build filesystem,
+VirtualBox VM configuration, and ISO packaging tree to investigate the professor's
+note regarding old QEMU files, virtual disk images, and emulator attachments.
+
+2. ACTIVE SYSTEM & RUNTIME AUDIT
+--------------------------------------------------------------------------------
+* Running QEMU Processes:
+  - Total QEMU processes active in background: 0 (NONE)
+  - Process table verified clean via `ps aux | grep -i qemu`.
+
+* Loop Devices & Mounts:
+  - All temporary loop devices detached via `losetup -D`.
+  - No orphaned loop mounts attached to active root filesystems.
+
+* VirtualBox VM Attachment ("Lunara-OS"):
+  - IDE Controller Port 0, Device 0: Attached to `C:\Users\Tashvi\Downloads\lunara-os-final.iso`
+  - SATA Controller Port 0, Device 0: Attached to `NEXUS-OS_.vdi`
+  - Video Controller: VMSVGA with 128 MB VRAM
+  - Boot Order: DVD-ROM -> Hard Disk (Floppy disabled)
+
+3. CLASSIFICATION OF FILES: STORED vs MOUNTED vs INCLUDED IN ISO
+--------------------------------------------------------------------------------
+CATEGORY A: Files merely stored in project folders (NOT in the bootable ISO)
+* `distro/out/microos-s0.img` through `microos-s5.img`: Stored in `distro/out/`.
+  These are intermediate stage disk images used by mmdebstrap to measure boot times
+  across stages S0 to S5. They are NOT included inside `lunara-os-final.iso`.
+* `distro/build/` (7.6 GB): Old unpacked chroot staging directories from previous builds.
+  Cleaned and removed from active disk storage.
+* `distro/vm.sh`: A shell script used for headless boot testing in QEMU prior to Oracle VM.
+  Stored only in the repository source tree.
+* `scripts/run.sh`, `scripts/debug.sh`, `scripts/shell.sh`: Developer scripts used for
+  running the kernel in QEMU during early RISC-V development.
+
+CATEGORY B: Files mounted through loop devices
+* Staging mounts occur ONLY transiently during the `build_iso.sh` packaging phase to copy
+  the ext4 rootfs into `filesystem.squashfs`, after which loop devices are unmounted
+  and deleted immediately. No persistent loop mounts remain.
+
+CATEGORY C: Files attached to running VirtualBox VMs
+* `lunara-os-final.iso`: Primary bootable ISO attached to IDE Controller (0,0).
+* `NEXUS-OS_.vdi`: Virtual hard disk attached to SATA Controller (0,0).
+
+CATEGORY D: Files specifically flagged as QEMU components in the ISO build
+* `qemu-system-misc` & `opensbi`: Previously installed via apt in `distro/build_iso.sh`
+  to allow running the legacy RISC-V kernel inside the Linux desktop.
+  Identified as non-essential for the host VirtualBox desktop.
+* `/usr/local/bin/micro-os-kernel`: Legacy launcher script pointing to `qemu-system-riscv64`.
+* `/opt/micro-os/microos.elf`: Pre-compiled RISC-V kernel binary (2.4 MB).
+
+4. CLEANUP ACTIONS EXECUTED
+--------------------------------------------------------------------------------
+1. Restored VirtualBox VM storage controller to mount `lunara-os-final.iso`.
+2. Verified all 3 bootloader options boot real components (Linux desktop, bare-metal Rust
+   microkernel on x86-64, and academic test suite).
+3. Detached all stale loop devices and unmounted temporary inspection mounts.
+4. Cleaned obsolete temporary build cache in `distro/build/` (freed 7.6 GB on host).
+5. Preserved all working ISO backups (`nexus-os-backup.iso`, `nexus-os.iso`, etc.).
+6. Verified standalone 18 MB microkernel ISO (`lunara-micro-x86.iso`) contains ZERO QEMU files.
+
+================================================================================
+END OF REPORT
+================================================================================
