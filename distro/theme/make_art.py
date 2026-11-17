@@ -126,6 +126,7 @@ def create_circular_orbit_wallpaper():
 def create_lock_screen(base_wp):
     """Render the lock-screen background matching Reference Image 2:
     - Same circular-orbit wallpaper as desktop.
+    - Top branding: LUNARA OS with small description below it.
     - Left floating panel: SYSTEM STATUS.
     - Right floating panel: QUICK INFO.
     - Bottom row: circular quick action buttons.
@@ -134,6 +135,25 @@ def create_lock_screen(base_wp):
     lock = base_wp.copy().convert("RGBA")
     overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
     d = ImageDraw.Draw(overlay)
+
+    def centered(text, y, f, fill):
+        try:
+            bbox = d.textbbox((0, 0), text, font=f)
+            w = bbox[2] - bbox[0]
+        except AttributeError:
+            w = d.textlength(text, font=f)
+        d.text(((W - w) / 2, y), text, font=f, fill=fill)
+
+    # LUNARA OS Celestial Ribbon Logo
+    logo_cx, logo_cy = W // 2, 78
+    for off in range(-12, 13, 3):
+        color = (214, 93, 140, max(40, 220 - abs(off) * 12))
+        d.arc((logo_cx - 28 + off, logo_cy - 12, logo_cx - 4 + off, logo_cy + 12), 120, 360, fill=color, width=2)
+        d.arc((logo_cx + 4 - off, logo_cy - 12, logo_cx + 28 - off, logo_cy + 12), 180, 60, fill=color, width=2)
+
+    # LUNARA OS Title with description below it
+    centered("LUNARA OS", 104, get_font(32, bold=True), (0xFD, 0xF2, 0xF6, 245))
+    centered("Your space. Your workflow.", 148, get_font(14), (0xF2, 0xA7, 0xBF, 215))
 
     # Left floating panel: SYSTEM STATUS
     card_l = (80, 410, 420, 680)

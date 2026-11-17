@@ -600,11 +600,11 @@ if [ -n "$out" ]; then
         xrandr --newmode "1280x720_60.00" 74.50 1280 1344 1472 1664 720 723 728 748 -hsync +vsync 2>/dev/null || true
         xrandr --addmode "$out" "1280x720_60.00" 2>/dev/null || true
     fi
-    # Auto-detect best resolution
-    xrandr --auto 2>/dev/null || true
-    best=$(xrandr | awk '/ connected/{f=1; next} f && /^[0-9]+/{f=0} f && /^ +[0-9]+x[0-9]+/{split($1,a,"x"); if (a[1]<=1920) {print $1; exit}}')
-    if [ -n "$best" ]; then
-        xrandr --output "$out" --mode "$best" 2>/dev/null || true
+    # Start with comfortable initial resolution so it fits smaller in the box at first
+    if xrandr | grep -q "1024x768"; then
+        xrandr --output "$out" --mode "1024x768" 2>/dev/null || true
+    else
+        xrandr --auto 2>/dev/null || true
     fi
 fi
 
