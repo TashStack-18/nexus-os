@@ -124,88 +124,14 @@ def create_circular_orbit_wallpaper():
 
 
 def create_lock_screen(base_wp):
-    """Render the lock-screen background matching Reference Image 2:
-    - Same circular-orbit wallpaper as desktop.
-    - Top branding: LUNARA OS with small description below it.
-    - Left floating panel: SYSTEM STATUS.
-    - Right floating panel: QUICK INFO.
-    - Bottom row: circular quick action buttons.
-    - Center region is left clean for LightDM interactive PAM login card.
+    """Render the clean, high-definition lock-screen background.
+    Uses the exact same high-definition circular-orbit wallpaper as the desktop,
+    with subtle dark frosting so LightDM's interactive centered login card and
+    top panel render cleanly at any resolution without stretching, clipping, or cut-offs.
     """
-    lock = base_wp.copy().convert("RGBA")
-    overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
-    d = ImageDraw.Draw(overlay)
-
-    def centered(text, y, f, fill):
-        try:
-            bbox = d.textbbox((0, 0), text, font=f)
-            w = bbox[2] - bbox[0]
-        except AttributeError:
-            w = d.textlength(text, font=f)
-        d.text(((W - w) / 2, y), text, font=f, fill=fill)
-
-    # LUNARA OS Celestial Ribbon Logo
-    logo_cx, logo_cy = W // 2, 78
-    for off in range(-12, 13, 3):
-        color = (214, 93, 140, max(40, 220 - abs(off) * 12))
-        d.arc((logo_cx - 28 + off, logo_cy - 12, logo_cx - 4 + off, logo_cy + 12), 120, 360, fill=color, width=2)
-        d.arc((logo_cx + 4 - off, logo_cy - 12, logo_cx + 28 - off, logo_cy + 12), 180, 60, fill=color, width=2)
-
-    # LUNARA OS Title with description below it
-    centered("LUNARA OS", 104, get_font(32, bold=True), (0xFD, 0xF2, 0xF6, 245))
-    centered("Your space. Your workflow.", 148, get_font(14), (0xF2, 0xA7, 0xBF, 215))
-
-    # Left floating panel: SYSTEM STATUS
-    card_l = (80, 410, 420, 680)
-    d.rounded_rectangle(card_l, radius=16, fill=(24, 18, 30, 210), outline=(214, 93, 140, 120), width=1)
-    d.text((105, 432), "SYSTEM STATUS", font=get_font(12, bold=True), fill=(214, 93, 140, 240))
-
-    metrics = [
-        ("CPU", "42%", 0.42),
-        ("RAM", "17%", 0.17),
-        ("Disk", "8%", 0.08),
-        ("Battery", "100%", 1.00),
-    ]
-    by = 472
-    for label, val_str, frac in metrics:
-        d.text((105, by), label, font=get_font(11), fill=(242, 167, 191, 230))
-        d.text((370, by), val_str, font=get_font(11, bold=True), fill=(253, 242, 246, 230), anchor="ra")
-        bar_y = by + 20
-        d.rounded_rectangle((105, bar_y, 370, bar_y + 6), radius=3, fill=(45, 30, 52, 220))
-        bar_w = int(265 * frac)
-        if bar_w > 0:
-            d.rounded_rectangle((105, bar_y, 105 + bar_w, bar_y + 6), radius=3, fill=(214, 93, 140, 240))
-        by += 44
-
-    # Right floating panel: QUICK INFO
-    card_r = (W - 420, 410, W - 80, 680)
-    d.rounded_rectangle(card_r, radius=16, fill=(24, 18, 30, 210), outline=(214, 93, 140, 120), width=1)
-    d.text((W - 395, 432), "QUICK INFO", font=get_font(12, bold=True), fill=(214, 93, 140, 240))
-
-    infos = [
-        ("Wi-Fi", "LUNARA-Net (Active)"),
-        ("Uptime", "Live Session (Booted)"),
-        ("Session", "XFCE / LUNARA Desktop"),
-        ("Security", "Protected & PAM Verified"),
-    ]
-    iy = 472
-    for title, val in infos:
-        d.text((W - 395, iy), title, font=get_font(11), fill=(242, 167, 191, 230))
-        d.text((W - 395, iy + 18), val, font=get_font(11, bold=True), fill=(253, 242, 246, 230))
-        iy += 44
-
-    # Bottom quick action buttons row (Matching Reference Image 2!)
-    icons = ["📶", "🔊", "🔆", "⌨", "♿", "⏻"]
-    total_btn_w = len(icons) * 56
-    start_bx = (W - total_btn_w) // 2
-    for i, ic in enumerate(icons):
-        bx = start_bx + i * 56
-        by = H - 85
-        d.ellipse((bx, by, bx + 42, by + 42), fill=(32, 22, 38, 200), outline=(214, 93, 140, 100), width=1)
-        d.text((bx + 21, by + 21), ic, font=get_font(14), fill=(253, 242, 246, 220), anchor="mm")
-
-    result = Image.alpha_composite(lock, overlay)
-    return result.convert("RGB")
+    darken = Image.new("RGBA", (W, H), (14, 11, 18, 120))
+    lock = Image.alpha_composite(base_wp.convert("RGBA"), darken)
+    return lock.convert("RGB")
 
 
 def create_avatar(out_path):

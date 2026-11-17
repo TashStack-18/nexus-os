@@ -21,6 +21,7 @@ chroot "$R" env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::http::Proxy="
     xfce4-screensaver fonts-dejavu-core papirus-icon-theme librsvg2-common \
     mupdf python3 python3-gi python3-gi-cairo gir1.2-gtk-3.0 \
     firefox-esr conky-all xfce4-settings xfce4-appfinder \
+    virtualbox-guest-x11 virtualbox-guest-utils \
     >/dev/null 2>&1 || true
 
 log "rendering modern LUNARA wallpaper, lock-screen background, and user avatar"
@@ -575,37 +576,32 @@ cat > "$R/usr/local/bin/lunara-display" <<'CONF'
 if command -v VBoxClient >/dev/null 2>&1; then
     VBoxClient --vmsvga 2>/dev/null || true
     VBoxClient --display 2>/dev/null || true
+    VBoxClient --seamless 2>/dev/null || true
+    VBoxClient --clipboard 2>/dev/null || true
 fi
 
 # Detect primary connected display
 out=$(xrandr | awk '/ connected/{print $1; exit}')
 if [ -n "$out" ]; then
-    # Add 1920x1080 modeline if missing
+    # Add native 16:9 / 16:10 HD modelines so they are always available in Display settings
     if ! xrandr | grep -q "1920x1080"; then
         xrandr --newmode "1920x1080_60.00" 173.00 1920 2048 2248 2576 1080 1083 1088 1120 -hsync +vsync 2>/dev/null || true
         xrandr --addmode "$out" "1920x1080_60.00" 2>/dev/null || true
     fi
-    # Add 1600x900 modeline if missing
     if ! xrandr | grep -q "1600x900"; then
         xrandr --newmode "1600x900_60.00" 118.25 1600 1696 1856 2112 900 903 908 934 -hsync +vsync 2>/dev/null || true
         xrandr --addmode "$out" "1600x900_60.00" 2>/dev/null || true
     fi
-    # Add 1366x768 modeline if missing
     if ! xrandr | grep -q "1366x768"; then
         xrandr --newmode "1366x768_60.00" 85.50 1366 1436 1579 1792 768 771 774 798 -hsync +vsync 2>/dev/null || true
         xrandr --addmode "$out" "1366x768_60.00" 2>/dev/null || true
     fi
-    # Add 1280x720 modeline if missing
     if ! xrandr | grep -q "1280x720"; then
         xrandr --newmode "1280x720_60.00" 74.50 1280 1344 1472 1664 720 723 728 748 -hsync +vsync 2>/dev/null || true
         xrandr --addmode "$out" "1280x720_60.00" 2>/dev/null || true
     fi
-    # Start with comfortable initial resolution so it fits smaller in the box at first
-    if xrandr | grep -q "1024x768"; then
-        xrandr --output "$out" --mode "1024x768" 2>/dev/null || true
-    else
-        xrandr --auto 2>/dev/null || true
-    fi
+    # Automatically adapt to VirtualBox window dimensions without stretching!
+    xrandr --auto 2>/dev/null || true
 fi
 
 # Start background auto-resizer loop (tracks VirtualBox window resizing dynamically)
