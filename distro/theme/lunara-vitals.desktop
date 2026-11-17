@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=LUNARA System Vitals
+Comment=Live circular gauges and vitals monitor
+Exec=/usr/local/bin/lunara-vitals
+Hidden=false
+NoDisplay=false
+X-GNOME-Autostart-enabled=true

@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+set -e
+ISO="/root/micro-os/distro/out/lunara-os-final.iso"
+MNT=$(mktemp -d)
+mount -o loop,ro "$ISO" "$MNT"
+echo "=== ISO Root Directory ==="
+ls -la "$MNT"
+echo "=== Boot Directory ==="
+ls -la "$MNT/boot"
+echo "=== Boot/grub Directory ==="
+ls -la "$MNT/boot/grub"
+echo "=== Check for isolinux ==="
+ls -la "$MNT/isolinux" 2>/dev/null || echo "No isolinux"
+echo "=== Check EFI ==="
+ls -la "$MNT/efi" 2>/dev/null || echo "No efi dir"
+ls -la "$MNT/EFI" 2>/dev/null || echo "No EFI dir"
+echo "=== grub.cfg Content ==="
+cat "$MNT/boot/grub/grub.cfg"
+umount "$MNT"
+rmdir "$MNT"

@@ -1,0 +1,11 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Task Manager
+Comment=LUNARA System Monitor
+Exec=lunara-tasks
+Icon=utilities-system-monitor
+Categories=System;Monitor;
+Terminal=false
+StartupNotify=true
+StartupWMClass=lunara-tasks

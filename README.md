@@ -1,27 +1,26 @@
-# NEXUS OS — Unified Educational Operating System & Microkernel (CA-6)
+# LUNARA OS — Unified Educational Operating System & Microkernel (CA-6)
 
-**Final Master Deliverable**: `nexus-os.iso`  
+**Final Master Deliverable**: `lunara-os-final.iso`  
 **Author**: Tashvi Adhlakha (25BTRCL271)  
+**Tagline**: *Your space. Your workflow.*  
 **Specialization**: Track A (Scheduler Engineering) & Track G (Research-to-Kernel Evaluation)  
 **Deployment & Verification**: [docs/DEPLOY.md](docs/DEPLOY.md)
 
 ---
 
-## 🌟 The Unified NEXUS OS (Hybrid Bootable ISO)
+## 🌟 The Unified LUNARA OS (Hybrid Bootable ISO)
 
-NEXUS OS merges the responsiveness and speed of a bare-metal educational Rust microkernel with the functionality, development tooling, and research visualization of a modern desktop into **ONE bootable ISO (`nexus-os.iso`)**:
+LUNARA OS merges the responsiveness and speed of a bare-metal educational Rust microkernel with the functionality, development tooling, and research visualization of a modern desktop into **ONE bootable ISO (`lunara-os-final.iso`)**:
 
-1. **NEXUS OS Live Desktop (Default Boot)**:
-   - **Xfce4 + Hardware Compositing**: 100% tear-free, dark NEXUS aesthetic, no black widget backgrounds, no overlapping cards.
-   - **Rust Development Studio (`nexus-studio`)**: Complete Rust IDE in GTK3 supporting project scaffolding (`Cargo.toml`, `src/main.rs`), syntax highlighting, `cargo check`/`cargo build`/`cargo run`, real-time compiler diagnostics with line jumping, and 6 pre-loaded academic example projects (`01_hello_world` through `06_microos_kernel_task`).
-   - **NEXUS Lab (`nexus-lab`)**: Unified 3-tab research application:
-     - **Scheduler Lab**: Comparative benchmarking of FCFS, SJF, SRTF, HRRN, RR (q=2), RR (q=8), and Linux EEVDF with interactive Gantt charts, turnaround/waiting metrics, throughput, and Jain's fairness index.
-     - **Research Findings**: Real CA-4 empirical data by Tashvi Adhlakha (hypotheses H1–H3 supported across 440 kernel runs, bimodal overload tables, integrated PDF viewer).
-     - **Programs**: One-click launcher for all OS utilities.
-   - **Task Manager & System Monitor (`nexus-tasks`)**: Live system monitor reading real `/proc` processes, CPU & RAM gauges, and process termination (`kill`).
-   - **Full POSIX & Hardware Tooling**: NetworkManager (LAN + Wi-Fi), APT package management, Snap Store, and laptop firmware drivers.
+1. **LUNARA OS Live Desktop (Default Boot)**:
+   - **Xfce4 + Hardware Compositing**: 100% tear-free, dark plum & mauve LUNARA aesthetic, matching the reference collage (flowing silky ribbon wave wallpaper with crescent moon, slim top panel, centered LUNARA branding, large digital clock, left shortcut stack, right System Vitals panel with live circular gauges, and bottom dock).
+   - **Rust Development Studio (`lunara-studio`)**: Complete Rust IDE in GTK3 supporting project scaffolding (`Cargo.toml`, `src/main.rs`), syntax highlighting, `cargo check`/`cargo build`/`cargo run`, real-time compiler diagnostics with line jumping, and 6 pre-loaded academic example projects (`01_hello_system` through `06_file_utility`).
+   - **NEXUS Lab (`nexus-lab`)**: Unified 4-tab research application (Scheduler Lab, Research Findings, Micro-OS & CA-6 Compliance, Programs).
+   - **Task Manager & System Monitor (`lunara-tasks`)**: Live system monitor reading real `/proc` processes, CPU & RAM gauges, and process termination (`kill`).
+   - **System Vitals Desktop Widget (`lunara-vitals`)**: Live circular gauge floating panel displaying real-time CPU, RAM, Disk, and system vitals directly on the desktop.
+   - **Full POSIX & Hardware Tooling**: NetworkManager (LAN + Wi-Fi), APT package management, and laptop firmware drivers.
 
-2. **NEXUS Micro-OS Kernel (Bare-Metal x86-64 & RISC-V)**:
+2. **LUNARA Micro-OS Kernel (Bare-Metal x86-64 & RISC-V)**:
    - **Instant Hardware Boot (<0.2s)**: Boots directly in ring 0 from GRUB on x86-64 without Linux.
    - **10/10 Core CA-6 Educational Mechanisms Verified**: Multiboot2 bootloader, direct VGA/VBE console, Task Control Blocks (TCB), intrusive ready queue, preemptive Round Robin scheduler, 100 Hz PIT timer interrupts, sync primitives (spinlocks, mutexes, semaphores), first-fit dynamic heap allocator, serial logging.
    - **68/68 Academic Checks Passing**: Complete verification suite (TC1 through TC6) passes cleanly on both x86-64 and RISC-V architectures.

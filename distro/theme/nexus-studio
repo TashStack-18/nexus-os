@@ -9,7 +9,9 @@ Features:
 - Integrated Cargo compiler (build, check, run, clean)
 - Diagnostics parser with line-jump to compiler errors and warnings
 - Real-time program execution and output streaming
-- Pre-loaded example programs (Concurrency, Synchronization, Fibonacci, Micro-OS task)
+- 6 Mandatory CA-6 Example Programs (System Info, Task Simulator, RR Scheduler, Threads/Sync, Memory Allocator, File I/O)
+- Dedicated Example Programs Library with project cards
+- Process termination (Stop button with process-group kill)
 - Target selection: Debian Linux Host vs Micro-OS Bare-Metal Kernel
 """
 import os
@@ -31,275 +33,526 @@ EXAMPLES_DIR = "/usr/local/share/nexus/examples"
 DEFAULT_WORKSPACE = os.path.expanduser("~/nexus_rust_projects")
 
 EXAMPLES = {
-    "01_hello_world": {
-        "title": "Hello World",
-        "about": "Standard starter program demonstrating console output and basic syntax.",
-        "toml": '[package]\nname = "hello_world"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n',
-        "main": """// NEXUS OS - Hello World Example
+    "01_hello_system": {
+        "title": "Program 1: Hello World & System Info",
+        "about": "Starter program demonstrating NEXUS OS greeting, architecture, hardware threads, and environment diagnostics.",
+        "concepts": "Formatted I/O, std::env, architecture reflection, CPU core parallelism detection.",
+        "toml": '[package]\nname = "hello_system"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n',
+        "main": """// LUNARA OS - Program 1: Hello World & System Diagnostics
+use std::env;
+
 fn main() {
-    println!("========================================");
-    println!(" Welcome to Rust on NEXUS OS! ");
-    println!("========================================");
-    println!("Host Architecture: x86_64-unknown-linux-gnu");
-    println!("Compiled with: rustc / Cargo");
-    
-    let message = "NEXUS OS combines bare-metal speed with modern developer tooling.";
-    println!("{}", message);
+    println!("============================================================");
+    println!("       LUNARA OS - Hello World & System Diagnostics          ");
+    println!("============================================================");
+    println!("Greeting:       Welcome to LUNARA OS Rust Development Studio!");
+    println!("Architecture:   {}", env::consts::ARCH);
+    println!("Target OS:      {}", env::consts::OS);
+    println!("Family:         {}", env::consts::FAMILY);
+    println!("Pointer Width:  {} bits", usize::BITS);
+
+    let cpus = std::thread::available_parallelism()
+        .map(|n| n.get())
+        .unwrap_or(1);
+    println!("Available CPUs: {}", cpus);
+
+    println!("\\nEnvironment Snapshot:");
+    for var in ["USER", "HOME", "SHELL", "TERM"] {
+        if let Ok(val) = env::var(var) {
+            println!("  * {:<8} = {}", var, val);
+        }
+    }
+
+    println!("\\n[Status] System diagnostics completed successfully.");
+    println!("============================================================");
 }
 """
     },
-    "02_fibonacci_primes": {
-        "title": "Fibonacci & Prime Numbers",
-        "about": "Algorithmic computation measuring compute throughput and iterations.",
-        "toml": '[package]\nname = "fibonacci_primes"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n',
-        "main": """// NEXUS OS - Algorithmic Compute Example
-use std::time::Instant;
+    "02_task_simulator": {
+        "title": "Program 2: Process & Task Simulator",
+        "about": "Operating system process lifecycle simulator with Task Control Blocks (TCBs) and state transitions.",
+        "concepts": "Enums, state machines, TCB structures, READY/RUNNING/BLOCKED/TERMINATED states, FIFO queue.",
+        "toml": '[package]\nname = "task_simulator"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n',
+        "main": """// NEXUS OS - Program 2: Process & Task Lifecycle Simulator
+use std::collections::VecDeque;
 
-fn fibonacci(n: u32) -> u64 {
-    match n {
-        0 => 0,
-        1 => 1,
-        _ => {
-            let mut a = 0;
-            let mut b = 1;
-            for _ in 2..=n {
-                let temp = a + b;
-                a = b;
-                b = temp;
-            }
-            b
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TaskState {
+    Ready,
+    Running,
+    Blocked,
+    Terminated,
+}
+
+#[derive(Debug, Clone)]
+struct Task {
+    id: usize,
+    name: &'static str,
+    priority: u8,
+    total_cycles: u32,
+    remaining_cycles: u32,
+    state: TaskState,
+}
+
+impl Task {
+    fn new(id: usize, name: &'static str, priority: u8, cycles: u32) -> Self {
+        Self {
+            id,
+            name,
+            priority,
+            total_cycles: cycles,
+            remaining_cycles: cycles,
+            state: TaskState::Ready,
         }
     }
 }
 
-fn count_primes(limit: u32) -> u32 {
-    let mut count = 0;
-    for n in 2..=limit {
-        let mut is_prime = true;
-        let mut i = 2;
-        while i * i <= n {
-            if n % i == 0 {
-                is_prime = false;
-                break;
-            }
-            i += 1;
-        }
-        if is_prime {
-            count += 1;
-        }
-    }
-    count
-}
-
 fn main() {
-    println!("[NEXUS Studio] Benchmark Demo");
-    let start = Instant::now();
+    println!("============================================================");
+    println!("      NEXUS OS - Process & Task Lifecycle Simulator         ");
+    println!("============================================================");
 
-    let fib_50 = fibonacci(50);
-    println!("Fibonacci(50) = {}", fib_50);
+    let mut tasks = vec![
+        Task::new(1, "Init/System", 1, 15),
+        Task::new(2, "AudioService", 3, 10),
+        Task::new(3, "NetworkDaemon", 2, 20),
+        Task::new(4, "UICompositor", 4, 12),
+        Task::new(5, "LoggerWorker", 1, 8),
+    ];
 
-    let primes_up_to_100k = count_primes(100_000);
-    println!("Prime numbers <= 100,000: {}", primes_up_to_100k);
-
-    println!("Completed in {:.2?}", start.elapsed());
-}
-"""
-    },
-    "03_concurrency_threads": {
-        "title": "Multi-Threaded Concurrency",
-        "about": "Spawning worker threads to demonstrate scheduling and parallel execution.",
-        "toml": '[package]\nname = "concurrency_demo"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n',
-        "main": """// NEXUS OS - Concurrency & Thread Scheduling Example
-use std::thread;
-use std::time::Duration;
-
-fn main() {
-    println!("[NEXUS OS] Spawning 5 concurrent worker threads...");
-
-    let mut handles = vec![];
-
-    for i in 1..=5 {
-        let handle = thread::spawn(move || {
-            println!("  [Worker #{}] Started on thread id {:?}", i, thread::current().id());
-            thread::sleep(Duration::from_millis(150 * i));
-            println!("  [Worker #{}] Finished processing.", i);
-            i * 10
-        });
-        handles.push(handle);
+    println!("[Stage 1] Initializing Task Control Blocks (TCBs):");
+    for t in &tasks {
+        println!("  Task #{}: Name={:<14} Prio={} Cycles={} State={:?}",
+            t.id, t.name, t.priority, t.total_cycles, t.state);
     }
 
-    println!("[NEXUS OS] Main thread waiting for workers to complete...");
+    println!("\\n[Stage 2] Simulating State Transitions (READY -> RUNNING -> BLOCKED -> READY -> TERMINATED):");
+    let mut ready_queue: VecDeque<usize> = (0..tasks.len()).collect();
+    let mut step = 1;
 
-    let mut results = vec![];
-    for handle in handles {
-        let res = handle.join().unwrap();
-        results.push(res);
-    }
+    while let Some(idx) = ready_queue.pop_front() {
+        let task = &mut tasks[idx];
+        task.state = TaskState::Running;
+        println!("  Step {:02}: Dispatching Task #{} ({}) -> RUNNING", step, task.id, task.name);
 
-    println!("[NEXUS OS] All workers joined. Results: {:?}", results);
-}
-"""
-    },
-    "04_sync_mutex": {
-        "title": "Mutex Synchronization",
-        "about": "Demonstrating mutual exclusion and shared state between concurrent threads.",
-        "toml": '[package]\nname = "sync_mutex_demo"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n',
-        "main": """// NEXUS OS - Mutex Synchronization & Contention
-use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::Duration;
+        let slice = std::cmp::min(task.remaining_cycles, 6);
+        task.remaining_cycles -= slice;
 
-fn main() {
-    println!("[NEXUS OS] Testing Mutex-Protected Shared State");
-
-    let counter = Arc::new(Mutex::new(0));
-    let mut handles = vec![];
-
-    for id in 1..=8 {
-        let counter_clone = Arc::clone(&counter);
-        let handle = thread::spawn(move || {
-            for _ in 0..100 {
-                let mut num = counter_clone.lock().unwrap();
-                *num += 1;
-                // Tiny yield simulation
-                thread::sleep(Duration::from_micros(50));
-            }
-            println!("Thread {} completed its 100 increments.", id);
-        });
-        handles.push(handle);
-    }
-
-    for handle in handles {
-        handle.join().unwrap();
-    }
-
-    let final_val = *counter.lock().unwrap();
-    println!("Final counter value: {} (Expected: 800)", final_val);
-    assert_eq!(final_val, 800, "Mutex synchronization verified!");
-    println!("Verification passed: Mutual exclusion guaranteed!");
-}
-"""
-    },
-    "05_dining_philosophers": {
-        "title": "Dining Philosophers",
-        "about": "Classic operating systems synchronization problem and deadlock avoidance.",
-        "toml": '[package]\nname = "dining_philosophers"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n',
-        "main": """// NEXUS OS - Dining Philosophers (Deadlock Avoidance)
-use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::Duration;
-
-struct Fork;
-
-fn main() {
-    println!("=== Dining Philosophers (Resource Hierarchy / Deadlock Free) ===");
-    let num_philosophers = 5;
-    let forks: Vec<Arc<Mutex<Fork>>> = (0..num_philosophers)
-        .map(|_| Arc::new(Mutex::new(Fork)))
-        .collect();
-
-    let mut handles = vec![];
-
-    for i in 0..num_philosophers {
-        let left = (i + 1) % num_philosophers;
-        let right = i;
-
-        // Resource hierarchy: always acquire lower-indexed fork first
-        let (first, second) = if left < right {
-            (Arc::clone(&forks[left]), Arc::clone(&forks[right]))
+        if task.remaining_cycles == 0 {
+            task.state = TaskState::Terminated;
+            println!("           Task #{} completed all cycles -> TERMINATED", task.id);
+        } else if step == 3 {
+            task.state = TaskState::Blocked;
+            println!("           Task #{} blocked on I/O event -> BLOCKED", task.id);
+            // Simulate unblocking on next cycle
+            task.state = TaskState::Ready;
+            ready_queue.push_back(idx);
         } else {
-            (Arc::clone(&forks[right]), Arc::clone(&forks[left]))
-        };
+            task.state = TaskState::Ready;
+            println!("           Quantum expired for Task #{} ({} cycles left) -> READY", task.id, task.remaining_cycles);
+            ready_queue.push_back(idx);
+        }
+        step += 1;
+    }
 
+    println!("\\n[Stage 3] Final Execution Summary:");
+    for t in &tasks {
+        println!("  Task #{:<2} {:<14} State: {:?} (0 remaining cycles)", t.id, t.name, t.state);
+    }
+    println!("============================================================");
+}
+"""
+    },
+    "03_rr_scheduler": {
+        "title": "Program 3: Round Robin CPU Scheduler",
+        "about": "Round Robin CPU scheduling simulator with quantum slicing, execution timeline, Gantt chart, and metrics.",
+        "concepts": "CPU scheduling algorithms, time quantum preemption, waiting time, turnaround time, throughput calculation.",
+        "toml": '[package]\nname = "rr_scheduler"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n',
+        "main": """// NEXUS OS - Program 3: Round Robin CPU Scheduler Simulation
+use std::collections::VecDeque;
+
+#[derive(Debug, Clone)]
+struct Process {
+    id: usize,
+    name: &'static str,
+    burst_time: u32,
+    remaining_time: u32,
+    arrival_time: u32,
+    finish_time: u32,
+    waiting_time: u32,
+    turnaround_time: u32,
+}
+
+fn main() {
+    println!("============================================================");
+    println!("       NEXUS OS - Round Robin CPU Scheduler Simulation       ");
+    println!("============================================================");
+
+    let quantum = 3;
+    println!("Time Quantum: {} ms\\n", quantum);
+
+    let mut processes = vec![
+        Process { id: 1, name: "P1: WebRenderer", burst_time: 8, remaining_time: 8, arrival_time: 0, finish_time: 0, waiting_time: 0, turnaround_time: 0 },
+        Process { id: 2, name: "P2: DB_Query",    burst_time: 4, remaining_time: 4, arrival_time: 0, finish_time: 0, waiting_time: 0, turnaround_time: 0 },
+        Process { id: 3, name: "P3: Compiler",    burst_time: 9, remaining_time: 9, arrival_time: 0, finish_time: 0, waiting_time: 0, turnaround_time: 0 },
+        Process { id: 4, name: "P4: DiskIO",      burst_time: 5, remaining_time: 5, arrival_time: 0, finish_time: 0, waiting_time: 0, turnaround_time: 0 },
+    ];
+
+    println!("Process Workload Table:");
+    println!("  {:<6} {:<16} {:<10}", "PID", "Process Name", "Burst (ms)");
+    for p in &processes {
+        println!("  P{:<5} {:<16} {} ms", p.id, p.name, p.burst_time);
+    }
+
+    println!("\\nExecution Gantt Timeline (Time Quantum = {}ms):", quantum);
+    print!("  0ms");
+
+    let mut current_time = 0;
+    let mut queue: VecDeque<usize> = (0..processes.len()).collect();
+
+    while let Some(idx) = queue.pop_front() {
+        let p = &mut processes[idx];
+        let exec_time = std::cmp::min(p.remaining_time, quantum);
+        p.remaining_time -= exec_time;
+        current_time += exec_time;
+
+        print!(" -> [{} ({}ms)] -> {}ms", p.name, exec_time, current_time);
+
+        if p.remaining_time > 0 {
+            queue.push_back(idx);
+        } else {
+            p.finish_time = current_time;
+            p.turnaround_time = p.finish_time - p.arrival_time;
+            p.waiting_time = p.turnaround_time - p.burst_time;
+        }
+    }
+    println!("\\n");
+
+    println!("Scheduling Results & Metrics:");
+    println!("  {:<6} {:<16} {:<10} {:<10} {:<10}", "PID", "Process", "Burst", "Waiting", "Turnaround");
+    let mut total_wait = 0;
+    let mut total_tat = 0;
+
+    for p in &processes {
+        println!("  P{:<5} {:<16} {:<10} {:<10} {:<10}",
+            p.id, p.name, format!("{} ms", p.burst_time), format!("{} ms", p.waiting_time), format!("{} ms", p.turnaround_time));
+        total_wait += p.waiting_time;
+        total_tat += p.turnaround_time;
+    }
+
+    let n = processes.len() as f64;
+    println!("\\nAggregate Averages:");
+    println!("  Average Waiting Time:    {:.2} ms", total_wait as f64 / n);
+    println!("  Average Turnaround Time: {:.2} ms", total_tat as f64 / n);
+    println!("  Throughput:              {:.3} processes/ms", n / current_time as f64);
+    println!("============================================================");
+}
+"""
+    },
+    "04_thread_sync": {
+        "title": "Program 4: Multithreading & Synchronization",
+        "about": "Concurrent threads competing for shared state protected by std::sync::Mutex and Arc.",
+        "concepts": "Thread spawning, thread joining, Arc smart pointer, Mutex mutual exclusion, race condition avoidance.",
+        "toml": '[package]\nname = "thread_sync"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n',
+        "main": """// NEXUS OS - Program 4: Multithreading & Synchronization
+use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
+
+struct SharedState {
+    counter: u64,
+    operations_log: Vec<String>,
+}
+
+fn main() {
+    println!("============================================================");
+    println!("    NEXUS OS - Multithreading & Mutex Synchronization       ");
+    println!("============================================================");
+
+    let state = Arc::new(Mutex::new(SharedState {
+        counter: 0,
+        operations_log: Vec::new(),
+    }));
+
+    let num_threads = 6;
+    let iterations_per_thread = 150;
+    println!("Spawning {} concurrent worker threads...", num_threads);
+    println!("Each thread will safely increment the shared counter {} times.\\n", iterations_per_thread);
+
+    let mut handles = Vec::new();
+
+    for thread_id in 1..=num_threads {
+        let state_clone = Arc::clone(&state);
         let handle = thread::spawn(move || {
-            println!("Philosopher {} is thinking...", i);
-            thread::sleep(Duration::from_millis(50));
-
-            let _f1 = first.lock().unwrap();
-            let _f2 = second.lock().unwrap();
-
-            println!("Philosopher {} acquired both forks and is EATING.", i);
-            thread::sleep(Duration::from_millis(100));
-            println!("Philosopher {} finished eating and put down forks.", i);
+            for i in 1..=iterations_per_thread {
+                // Critical Section guarded by Mutex
+                {
+                    let mut lock = state_clone.lock().unwrap();
+                    lock.counter += 1;
+                    if i == iterations_per_thread {
+                        lock.operations_log.push(format!("Worker-{} finished final increment", thread_id));
+                    }
+                }
+                // Small yield
+                if i % 30 == 0 {
+                    thread::sleep(Duration::from_micros(50));
+                }
+            }
+            println!("  [Worker-{}] Completed all {} iterations.", thread_id, iterations_per_thread);
         });
         handles.push(handle);
     }
 
+    println!("[Main] Waiting for all worker threads to join...");
     for handle in handles {
-        handle.join().unwrap();
+        handle.join().expect("Worker thread panicked!");
     }
-    println!("All philosophers dined without deadlock!");
+
+    let final_lock = state.lock().unwrap();
+    let expected = (num_threads * iterations_per_thread) as u64;
+    println!("\\nSynchronization Results:");
+    println!("  Final Counter Value: {} (Expected: {})", final_lock.counter, expected);
+    println!("  Total Logged Events: {}", final_lock.operations_log.len());
+
+    assert_eq!(final_lock.counter, expected, "Data race detected!");
+    println!("\\n[VERIFICATION PASSED] Mutual exclusion guaranteed: Zero data races!");
+    println!("============================================================");
 }
 """
     },
-    "06_microos_kernel_task": {
-        "title": "Micro-OS Kernel Task Template",
-        "about": "Code conforming to the Rust Micro-OS bare-metal task execution interface.",
-        "toml": '# Micro-OS Kernel Program Template\n# Placed in kernel/src/programs/<name>.rs\n',
-        "main": """//! Custom Micro-OS Kernel Application
-//! This program is designed to be linked into or dispatched by the
-//! Rust Micro-OS Kernel (no_std environment).
+    "05_mem_allocator": {
+        "title": "Program 5: Memory Allocation Demonstration",
+        "about": "Educational fixed-block / first-fit allocator simulating heap management, fragmentation, and safe OOM handling.",
+        "concepts": "Memory allocation, deallocation, block fragmentation, visual memory map, error handling.",
+        "toml": '[package]\nname = "mem_allocator"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n',
+        "main": """// NEXUS OS - Program 5: Educational Memory Allocator Demo
 
-// When built inside the Micro-OS kernel:
-// use super::arg_u64;
-// use crate::sys;
+const TOTAL_HEAP_BYTES: usize = 1024;
+const BLOCK_SIZE: usize = 64;
+const TOTAL_BLOCKS: usize = TOTAL_HEAP_BYTES / BLOCK_SIZE;
 
-pub fn main(args: &[&str]) -> i32 {
-    let limit = 5;
-    println!("[Micro-OS Task] Started task with limit = {}", limit);
-
-    for i in 1..=limit {
-        println!("  [Task Step {}/{}] Working on CPU slice...", i, limit);
-        // In the Micro-OS kernel, cooperative yield or sleep:
-        // sys::sleep_ms(200);
-    }
-
-    println!("[Micro-OS Task] Task completed successfully.");
-    0
+struct EducationalAllocator {
+    allocated: [bool; TOTAL_BLOCKS],
 }
 
-#[cfg(not(target_os = "none"))]
+impl EducationalAllocator {
+    fn new() -> Self {
+        Self {
+            allocated: [false; TOTAL_BLOCKS],
+        }
+    }
+
+    fn allocate(&mut self, bytes: usize) -> Result<(usize, usize), &'static str> {
+        if bytes == 0 {
+            return Err("Cannot allocate 0 bytes");
+        }
+        let needed_blocks = (bytes + BLOCK_SIZE - 1) / BLOCK_SIZE;
+
+        // First-fit contiguous free block search
+        let mut consecutive = 0;
+        let mut start_index = None;
+
+        for i in 0..TOTAL_BLOCKS {
+            if !self.allocated[i] {
+                consecutive += 1;
+                if consecutive == needed_blocks {
+                    start_index = Some(i + 1 - needed_blocks);
+                    break;
+                }
+            } else {
+                consecutive = 0;
+            }
+        }
+
+        match start_index {
+            Some(start) => {
+                for b in start..(start + needed_blocks) {
+                    self.allocated[b] = true;
+                }
+                let byte_offset = start * BLOCK_SIZE;
+                Ok((byte_offset, needed_blocks))
+            }
+            None => Err("Out of memory: No contiguous free blocks found"),
+        }
+    }
+
+    fn deallocate(&mut self, byte_offset: usize, blocks: usize) -> Result<(), &'static str> {
+        if byte_offset % BLOCK_SIZE != 0 {
+            return Err("Invalid block alignment");
+        }
+        let start = byte_offset / BLOCK_SIZE;
+        if start + blocks > TOTAL_BLOCKS {
+            return Err("Deallocation out of bounds");
+        }
+        for b in start..(start + blocks) {
+            self.allocated[b] = false;
+        }
+        Ok(())
+    }
+
+    fn print_memory_map(&self) {
+        print!("  Memory Map [{} blocks]: [", TOTAL_BLOCKS);
+        for &is_alloc in &self.allocated {
+            if is_alloc {
+                print!("■");
+            } else {
+                print!("□");
+            }
+        }
+        println!("] (■=Used, □=Free)");
+    }
+}
+
 fn main() {
-    let args = ["sample_arg"];
-    let exit_code = main(&args);
-    println!("Exited with code: {}", exit_code);
+    println!("============================================================");
+    println!("     NEXUS OS - Educational Memory Allocator Demo          ");
+    println!("============================================================");
+    println!("Total Heap Capacity: {} bytes ({} blocks of {}B each)\\n", TOTAL_HEAP_BYTES, TOTAL_BLOCKS, BLOCK_SIZE);
+
+    let mut heap = EducationalAllocator::new();
+    heap.print_memory_map();
+
+    println!("\\n[1] Allocating Block A (120 bytes -> 2 blocks):");
+    let (off_a, blk_a) = heap.allocate(120).unwrap();
+    println!("    Allocated at offset 0x{:04x} ({} blocks)", off_a, blk_a);
+    heap.print_memory_map();
+
+    println!("\\n[2] Allocating Block B (250 bytes -> 4 blocks):");
+    let (off_b, blk_b) = heap.allocate(250).unwrap();
+    println!("    Allocated at offset 0x{:04x} ({} blocks)", off_b, blk_b);
+    heap.print_memory_map();
+
+    println!("\\n[3] Allocating Block C (60 bytes -> 1 block):");
+    let (off_c, blk_c) = heap.allocate(60).unwrap();
+    println!("    Allocated at offset 0x{:04x} ({} blocks)", off_c, blk_c);
+    heap.print_memory_map();
+
+    println!("\\n[4] Deallocating Block B (freeing middle 4 blocks):");
+    heap.deallocate(off_b, blk_b).unwrap();
+    println!("    Deallocated offset 0x{:04x}", off_b);
+    heap.print_memory_map();
+
+    println!("\\n[5] Allocating Block D (180 bytes -> 3 blocks, fits into freed hole):");
+    let (off_d, blk_d) = heap.allocate(180).unwrap();
+    println!("    Allocated at offset 0x{:04x} ({} blocks)", off_d, blk_d);
+    heap.print_memory_map();
+
+    println!("\\n[6] Stress test: Attempting allocation exceeding capacity (900 bytes):");
+    match heap.allocate(900) {
+        Ok((off, blk)) => println!("    Unexpected success: offset 0x{:04x} ({} blocks)", off, blk),
+        Err(err) => println!("    [Safe Error Handled] Allocation rejected gracefully: '{}'", err),
+    }
+
+    println!("\\n[Memory Stats] Safe allocation, fragmentation reuse, and OOM handling verified.");
+    println!("============================================================");
+}
+"""
+    },
+    "06_file_utility": {
+        "title": "Program 6: File Management & CLI Utility",
+        "about": "File management utility demonstrating creating, reading, writing, appending files and directory listing.",
+        "concepts": "std::fs, std::io, File creation, Read/Write streams, append mode, directory traversal, Result handling.",
+        "toml": '[package]\nname = "file_utility"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n',
+        "main": """// NEXUS OS - Program 6: File Management & Command-Line Utility
+use std::fs::{self, File, OpenOptions};
+use std::io::{self, Read, Write};
+
+fn main() -> io::Result<()> {
+    println!("============================================================");
+    println!("     NEXUS OS - File System & I/O Management Utility        ");
+    println!("============================================================");
+
+    let test_dir = "/tmp/nexus_fs_demo";
+    println!("[Step 1] Creating temporary demo directory: {}", test_dir);
+    fs::create_dir_all(test_dir)?;
+
+    let test_file = format!("{}/system_manifest.txt", test_dir);
+    println!("[Step 2] Writing initial file: {}", test_file);
+    {
+        let mut file = File::create(&test_file)?;
+        writeln!(file, "# NEXUS OS Manifest File")?;
+        writeln!(file, "build=nexus-os-final-v2")?;
+        writeln!(file, "target=x86_64")?;
+        writeln!(file, "status=production")?;
+    }
+
+    println!("[Step 3] Appending audit logs to file...");
+    {
+        let mut file = OpenOptions::new().append(true).open(&test_file)?;
+        writeln!(file, "timestamp=2026-11-17T03:30:00Z event=KERNEL_INIT")?;
+        writeln!(file, "timestamp=2026-11-17T03:30:01Z event=SCHED_READY")?;
+    }
+
+    println!("[Step 4] Reading back contents:");
+    {
+        let mut file = File::open(&test_file)?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+        for line in contents.lines() {
+            println!("    | {}", line);
+        }
+    }
+
+    println!("\\n[Step 5] Querying Directory Entries in '{}':", test_dir);
+    let entries = fs::read_dir(test_dir)?;
+    for entry in entries {
+        let entry = entry?;
+        let meta = entry.metadata()?;
+        println!("  * File: {:<22} Size: {} bytes (ReadOnly: {})",
+            entry.file_name().to_string_lossy(), meta.len(), meta.permissions().readonly());
+    }
+
+    println!("\\n[Step 6] Testing Robust Error Handling on non-existent path:");
+    let invalid_path = "/nonexistent_nexus_dir/file.txt";
+    match File::open(invalid_path) {
+        Ok(_) => println!("    Unexpectedly opened non-existent file!"),
+        Err(e) => println!("    [Safe Error Handled] Open failed cleanly: '{}' ({:?})", e, e.kind()),
+    }
+
+    // Clean up
+    let _ = fs::remove_dir_all(test_dir);
+    println!("\\n[Status] File I/O operations and error boundaries verified.");
+    println!("============================================================");
+    Ok(())
 }
 """
     }
 }
 
 DARK_CSS = b"""
-window { background-color: #0c101d; color: #e8edf8; font-family: 'DejaVu Sans', sans-serif; }
-headerbar { background: #12182b; border-bottom: 1px solid #1e2945; color: #ffffff; }
-.card { background-color: #141c30; border-radius: 8px; border: 1px solid #1e2945; }
-.editor-frame { background-color: #0a0d18; border: 1px solid #1e2945; border-radius: 6px; }
-textview.editor { background-color: #0a0d18; color: #f0f4fc; font-family: 'DejaVu Sans Mono', 'Courier New', monospace; font-size: 11pt; }
-textview.console { background-color: #070910; color: #c8d3e8; font-family: 'DejaVu Sans Mono', monospace; font-size: 10pt; }
-treeview { background-color: #101626; color: #d0daf0; font-size: 10pt; }
-treeview:selected { background-color: #2b3d6b; color: #ffffff; }
-notebook > header { background-color: #101626; border-bottom: 1px solid #1e2945; }
-notebook > header > tabs > tab { padding: 6px 14px; color: #8a9bb8; }
-notebook > header > tabs > tab:checked { color: #ffffff; border-bottom: 2px solid #5b8cff; background-color: #141c30; }
-button { background: #1c2640; color: #e8edf8; border-radius: 6px; border: 1px solid #28375a; padding: 5px 12px; font-weight: bold; }
-button:hover { background: #263558; border-color: #5b8cff; }
-button.primary { background: #3366ff; color: #ffffff; border-color: #4d79ff; }
-button.primary:hover { background: #4d79ff; }
-button.success { background: #1f8a48; color: #ffffff; border-color: #28a745; }
-button.danger { background: #bd2130; color: #ffffff; border-color: #dc3545; }
-label.title { font-size: 14pt; font-weight: bold; color: #ffffff; }
-label.subtitle { font-size: 9pt; color: #8a9bb8; }
-label.diag-error { color: #ff5f57; font-weight: bold; }
-label.diag-warn { color: #febc2e; font-weight: bold; }
-statusbar { background-color: #0d1222; color: #8a9bb8; font-size: 9pt; }
+window { background-color: #141218; color: #fdf2f6; font-family: 'DejaVu Sans', sans-serif; }
+headerbar { background: #1e1924; border-bottom: 1px solid #362939; color: #fdf2f6; }
+.card { background-color: #1e1924; border-radius: 8px; border: 1px solid #362939; }
+.editor-frame { background-color: #16141c; border: 1px solid #362939; border-radius: 6px; }
+textview.editor { background-color: #16141c; color: #fdf2f6; font-family: 'DejaVu Sans Mono', 'Courier New', monospace; font-size: 11pt; }
+textview.console { background-color: #100e14; color: #fadbe5; font-family: 'DejaVu Sans Mono', monospace; font-size: 10pt; }
+treeview { background-color: #1a1622; color: #ecd6df; font-size: 10pt; }
+treeview:selected { background-color: #4a3548; color: #ffffff; }
+notebook > header { background-color: #18151f; border-bottom: 1px solid #362939; }
+notebook > header > tabs > tab { padding: 6px 14px; color: #b89da9; }
+notebook > header > tabs > tab:checked { color: #ffffff; border-bottom: 2px solid #d65d8c; background-color: #241d2c; }
+button { background: #2a202e; color: #fdf2f6; border-radius: 6px; border: 1px solid #4a384e; padding: 5px 12px; font-weight: bold; }
+button:hover { background: #3b2d41; border-color: #d65d8c; }
+button.primary { background: #c95d82; color: #ffffff; border-color: #e07297; }
+button.primary:hover { background: #e07297; }
+button.success { background: #ad4b75; color: #ffffff; border-color: #c95d82; }
+button.success:hover { background: #c95d82; }
+button.danger { background: #96283b; color: #ffffff; border-color: #bd334b; }
+label.title { font-size: 14pt; font-weight: bold; color: #fdf2f6; }
+label.subtitle { font-size: 9pt; color: #c9899e; }
+label.diag-error { color: #ff5f7e; font-weight: bold; }
+label.diag-warn { color: #f7b267; font-weight: bold; }
+statusbar { background-color: #121016; color: #b89da9; font-size: 9pt; }
 """
 
 class RustStudioApp(Gtk.Window):
     def __init__(self):
-        super().__init__(title="NEXUS Rust Development Studio")
+        super().__init__(title="LUNARA Rust Development Studio")
         self.set_default_size(1180, 780)
         self.set_position(Gtk.WindowPosition.CENTER)
-        self.set_wmclass("nexus-studio", "Nexus-studio")
-        self.set_role("nexus-studio")
+        self.set_wmclass("lunara-studio", "Lunara-studio")
+        self.set_role("lunara-studio")
+        self.set_decorated(True)
         self.connect("delete-event", self._on_delete_event)
         self.connect("destroy", self._on_destroy)
 
@@ -322,9 +575,12 @@ class RustStudioApp(Gtk.Window):
     def _cleanup_and_quit(self):
         if self.active_process and self.active_process.poll() is None:
             try:
-                self.active_process.kill()
+                os.killpg(os.getpgid(self.active_process.pid), signal.SIGKILL)
             except Exception:
-                pass
+                try:
+                    self.active_process.kill()
+                except Exception:
+                    pass
         try:
             Gtk.main_quit()
         except Exception:
@@ -343,14 +599,14 @@ class RustStudioApp(Gtk.Window):
         self.add(vbox)
 
         # 1. Top Header Bar / Toolbar
-        top_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8, margin=8)
+        top_bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6, margin=8)
         top_bar.get_style_context().add_class("card")
         vbox.pack_start(top_bar, False, False, 0)
 
         # Brand / Title
         brand_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
         title_lbl = Gtk.Label(xalign=0)
-        title_lbl.set_markup("<b>NEXUS Rust Studio</b>")
+        title_lbl.set_markup("<b>LUNARA Rust Studio</b>")
         title_lbl.get_style_context().add_class("title")
         self.sub_lbl = Gtk.Label(label="No project loaded", xalign=0)
         self.sub_lbl.get_style_context().add_class("subtitle")
@@ -359,7 +615,7 @@ class RustStudioApp(Gtk.Window):
         top_bar.pack_start(brand_box, False, False, 6)
 
         sep1 = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
-        top_bar.pack_start(sep1, False, False, 6)
+        top_bar.pack_start(sep1, False, False, 4)
 
         # Project Controls
         btn_new_proj = Gtk.Button(label="+ New Project")
@@ -378,9 +634,15 @@ class RustStudioApp(Gtk.Window):
         btn_save.connect("clicked", self._on_save_file)
         top_bar.pack_start(btn_save, False, False, 0)
 
+        # Dedicated Example Programs Library Button
+        btn_examples = Gtk.Button(label="📚 Example Programs")
+        btn_examples.get_style_context().add_class("primary")
+        btn_examples.connect("clicked", self._on_show_examples_library)
+        top_bar.pack_start(btn_examples, False, False, 0)
+
         # Examples dropdown
         self.example_combo = Gtk.ComboBoxText()
-        self.example_combo.append("", "Load Example Program...")
+        self.example_combo.append("", "Select Example...")
         for key, val in EXAMPLES.items():
             self.example_combo.append(key, val["title"])
         self.example_combo.set_active(0)
@@ -388,7 +650,7 @@ class RustStudioApp(Gtk.Window):
         top_bar.pack_start(self.example_combo, False, False, 0)
 
         sep2 = Gtk.Separator(orientation=Gtk.Orientation.VERTICAL)
-        top_bar.pack_start(sep2, False, False, 6)
+        top_bar.pack_start(sep2, False, False, 4)
 
         # Cargo Controls
         self.btn_check = Gtk.Button(label="Check")
@@ -462,40 +724,38 @@ class RustStudioApp(Gtk.Window):
         vpaned.set_position(440)
         hpaned.pack2(vpaned, True, False)
 
-        # Top Right: Editor Tabs
-        editor_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, margin=6)
-        editor_box.get_style_context().add_class("editor-frame")
-        vpaned.pack1(editor_box, True, False)
-
         # Editor Notebook
         self.editor_notebook = Gtk.Notebook()
         self.editor_notebook.set_scrollable(True)
         self.editor_notebook.connect("switch-page", self._on_tab_switched)
-        editor_box.pack_start(self.editor_notebook, True, True, 0)
+        vpaned.pack1(self.editor_notebook, True, False)
 
-        # Bottom Right: Output & Diagnostics Notebook
-        output_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2, margin=6)
-        output_box.get_style_context().add_class("card")
-        vpaned.pack2(output_box, False, False)
-
+        # Bottom Panel (Notebook: Output Console, Diagnostics, Terminal)
         self.out_notebook = Gtk.Notebook()
-        output_box.pack_start(self.out_notebook, True, True, 0)
+        vpaned.pack2(self.out_notebook, False, False)
 
-        # Tab 1: Build & Execution Output
-        tab1_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, margin=6)
+        # Tab 1: Execution Output
+        tab1_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        sc_out = Gtk.ScrolledWindow()
         self.console_view = Gtk.TextView()
-        self.console_view.set_editable(False)
-        self.console_view.set_cursor_visible(False)
         self.console_view.get_style_context().add_class("console")
+        self.console_view.set_editable(False)
+        self.console_view.set_monospace(True)
+        self.console_view.set_left_margin(8)
+        self.console_view.set_right_margin(8)
         self.console_buf = self.console_view.get_buffer()
-        sc_console = Gtk.ScrolledWindow()
-        sc_console.add(self.console_view)
-        tab1_box.pack_start(sc_console, True, True, 0)
+        sc_out.add(self.console_view)
+        tab1_box.pack_start(sc_out, True, True, 0)
+
+        btn_clear = Gtk.Button(label="Clear Output")
+        btn_clear.connect("clicked", lambda _: self._clear_console())
+        tab1_ctrl = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6, margin=4)
+        tab1_ctrl.pack_end(btn_clear, False, False, 0)
+        tab1_box.pack_start(tab1_ctrl, False, False, 0)
         self.out_notebook.append_page(tab1_box, Gtk.Label(label="Execution Output"))
 
-        # Tab 2: Compiler Diagnostics
-        tab2_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4, margin=6)
-        # Store: [Severity, File, Line, Message]
+        # Tab 2: Diagnostics & Errors
+        tab2_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         self.diag_store = Gtk.ListStore(str, str, int, str)
         self.diag_view = Gtk.TreeView(model=self.diag_store)
         for i, title in enumerate(("Severity", "File", "Line", "Message")):
@@ -531,20 +791,82 @@ class RustStudioApp(Gtk.Window):
         key, mod = Gtk.accelerator_parse("<Control>s")
         accel.connect(key, mod, Gtk.AccelFlags.VISIBLE, lambda *_: self._on_save_file())
 
+    # ------------------------------------------------------------- Example Programs Library Dialog
+    def _on_show_examples_library(self, _):
+        dlg = Gtk.Dialog(title="Example Programs Library", parent=self, flags=Gtk.DialogFlags.MODAL)
+        dlg.set_default_size(780, 560)
+        box = dlg.get_content_area()
+        box.set_spacing(10)
+        box.set_margin_top(12)
+        box.set_margin_bottom(12)
+        box.set_margin_start(16)
+        box.set_margin_end(16)
+
+        hdr = Gtk.Label(label="<b>NEXUS OS — CA-6 Verified Rust Example Programs</b>", use_markup=True, xalign=0)
+        hdr.get_style_context().add_class("title")
+        sub = Gtk.Label(label="Select any project below to load its source code or run it directly.", xalign=0)
+        sub.get_style_context().add_class("subtitle")
+        box.pack_start(hdr, False, False, 0)
+        box.pack_start(sub, False, False, 0)
+
+        sc = Gtk.ScrolledWindow()
+        sc.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        grid = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=10)
+        sc.add(grid)
+        box.pack_start(sc, True, True, 0)
+
+        for key, info in EXAMPLES.items():
+            card = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6, margin=8)
+            card.get_style_context().add_class("card")
+
+            top_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            lbl_title = Gtk.Label(label=f"<b>{info['title']}</b>", use_markup=True, xalign=0)
+            lbl_title.get_style_context().add_class("title")
+            top_row.pack_start(lbl_title, True, True, 0)
+
+            btn_load = Gtk.Button(label="Open Project")
+            btn_load.connect("clicked", lambda _, k=key: (self._load_example_by_key(k), dlg.destroy()))
+            btn_run_now = Gtk.Button(label="Run Immediately")
+            btn_run_now.get_style_context().add_class("success")
+            btn_run_now.connect("clicked", lambda _, k=key: (self._load_example_by_key(k), dlg.destroy(), GLib.timeout_add(200, lambda: self._run_cargo(["run"]))))
+
+            top_row.pack_end(btn_run_now, False, False, 0)
+            top_row.pack_end(btn_load, False, False, 0)
+            card.pack_start(top_row, False, False, 0)
+
+            lbl_desc = Gtk.Label(label=info["about"], xalign=0, wrap=True)
+            card.pack_start(lbl_desc, False, False, 0)
+
+            lbl_conc = Gtk.Label(label=f"<i>Concepts:</i> {info.get('concepts', '')}", use_markup=True, xalign=0, wrap=True)
+            lbl_conc.get_style_context().add_class("subtitle")
+            card.pack_start(lbl_conc, False, False, 0)
+
+            grid.pack_start(card, False, False, 0)
+
+        dlg.add_button("Close", Gtk.ResponseType.CLOSE)
+        dlg.connect("response", lambda d, r: d.destroy())
+        dlg.show_all()
+
+    def _load_example_by_key(self, key):
+        if key not in EXAMPLES:
+            return
+        proj_dir = os.path.join(DEFAULT_WORKSPACE, key)
+        if not os.path.exists(proj_dir):
+            self._create_project_from_template(key, proj_dir)
+        self._set_active_project(proj_dir)
+
     # ------------------------------------------------------------- Syntax Highlighter
     def _apply_syntax_highlighting(self, text_buf):
-        # Configure tags if not already present
         table = text_buf.get_tag_table()
         if not table.lookup("keyword"):
-            tag_kw = text_buf.create_tag("keyword", foreground="#7c4dff", weight=Pango.Weight.BOLD)
+            tag_kw = text_buf.create_tag("keyword", foreground="#c9899e", weight=Pango.Weight.BOLD)
             tag_type = text_buf.create_tag("type", foreground="#34d1bf", weight=Pango.Weight.BOLD)
-            tag_macro = text_buf.create_tag("macro", foreground="#ffb86b", weight=Pango.Weight.BOLD)
-            tag_str = text_buf.create_tag("string", foreground="#28c840")
-            tag_comment = text_buf.create_tag("comment", foreground="#718096", style=Pango.Style.ITALIC)
+            tag_macro = text_buf.create_tag("macro", foreground="#f2a7bf", weight=Pango.Weight.BOLD)
+            tag_str = text_buf.create_tag("string", foreground="#a8d5ba")
+            tag_comment = text_buf.create_tag("comment", foreground="#8a7384", style=Pango.Style.ITALIC)
             tag_num = text_buf.create_tag("number", foreground="#febc2e")
-            tag_attr = text_buf.create_tag("attribute", foreground="#5b8cff")
+            tag_attr = text_buf.create_tag("attribute", foreground="#d65d8c")
 
-        # Clear existing formatting
         start, end = text_buf.get_bounds()
         text_buf.remove_all_tags(start, end)
         content = text_buf.get_text(start, end, False)
@@ -615,14 +937,11 @@ class RustStudioApp(Gtk.Window):
             self.active_file_path = None
             self._update_title()
 
-    def _tab_switched(self, notebook, page, page_num):
+    def _on_tab_switched(self, notebook, page, page_num):
         page_widget = notebook.get_nth_page(page_num)
         if hasattr(page_widget, "file_path"):
             self.active_file_path = page_widget.file_path
             self._update_title()
-
-    def _on_tab_switched(self, notebook, page, page_num):
-        self._tab_switched(notebook, page, page_num)
 
     def _on_cursor_moved(self, text_buf, param_spec):
         pos = text_buf.get_property("cursor-position")
@@ -642,16 +961,18 @@ class RustStudioApp(Gtk.Window):
     # ------------------------------------------------------------- Project & File Tree
     def _load_initial_project(self):
         os.makedirs(DEFAULT_WORKSPACE, exist_ok=True)
-        # Ensure Hello World example exists
-        default_proj = os.path.join(DEFAULT_WORKSPACE, "01_hello_world")
-        if not os.path.exists(default_proj):
-            self._create_project_from_template("01_hello_world", default_proj)
+        # Ensure all 6 example programs exist
+        for key in EXAMPLES:
+            proj_dir = os.path.join(DEFAULT_WORKSPACE, key)
+            if not os.path.exists(proj_dir):
+                self._create_project_from_template(key, proj_dir)
 
+        default_proj = os.path.join(DEFAULT_WORKSPACE, "01_hello_system")
         self._set_active_project(default_proj)
 
     def _set_active_project(self, proj_dir):
         self.active_project_dir = proj_dir
-        self.sub_lbl.set_text(f"Project: {os.path.basename(proj_dir)} ({proj_dir})")
+        self.sub_lbl.set_text(f"Project: {os.path.basename(proj_dir)}")
         self._refresh_file_tree()
 
         # Open src/main.rs by default if it exists
@@ -694,7 +1015,6 @@ class RustStudioApp(Gtk.Window):
             self._open_file_in_editor(full_path)
 
     def _open_file_in_editor(self, full_path):
-        # Check if already open
         for i in range(self.editor_notebook.get_n_pages()):
             page = self.editor_notebook.get_nth_page(i)
             if hasattr(page, "file_path") and page.file_path == full_path:
@@ -728,123 +1048,102 @@ class RustStudioApp(Gtk.Window):
                 f.write(text)
             self.statusbar.pop(self.status_context)
             self.statusbar.push(self.status_context, f"Saved: {os.path.basename(file_path)}")
-            self._log_console(f"[NEXUS Studio] Saved {file_path}\n")
         except Exception as e:
-            self._log_console(f"Save error: {e}\n")
+            self._log_console(f"Error saving {file_path}: {e}\n")
 
     def _on_new_file_dialog(self, _):
         if not self.active_project_dir:
             return
-        dialog = Gtk.Dialog(title="Create New File", parent=self, flags=0)
-        dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OK, Gtk.ResponseType.OK)
-        box = dialog.get_content_area()
-        box.set_spacing(8)
-        box.set_margin_top(10)
-        box.set_margin_bottom(10)
-        box.set_margin_left(14)
-        box.set_margin_right(14)
-
-        lbl = Gtk.Label(label="File name (e.g. src/utils.rs):")
+        dlg = Gtk.Dialog(title="New File", parent=self, flags=Gtk.DialogFlags.MODAL)
+        dlg.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        dlg.add_button("Create", Gtk.ResponseType.OK)
+        box = dlg.get_content_area()
+        lbl = Gtk.Label(label="File name (e.g. lib.rs or mod.rs):")
         entry = Gtk.Entry()
-        entry.set_text("src/lib.rs")
-        box.pack_start(lbl, False, False, 0)
-        box.pack_start(entry, False, False, 0)
-        dialog.show_all()
+        entry.set_text("new_file.rs")
+        box.pack_start(lbl, False, False, 6)
+        box.pack_start(entry, False, False, 6)
+        dlg.show_all()
 
-        res = dialog.run()
-        if res == Gtk.ResponseType.OK:
+        if dlg.run() == Gtk.ResponseType.OK:
             fname = entry.get_text().strip()
             if fname:
-                target_p = os.path.join(self.active_project_dir, fname)
-                os.makedirs(os.path.dirname(target_p), exist_ok=True)
-                if not os.path.exists(target_p):
-                    with open(target_p, "w") as f:
-                        f.write("// New Rust source file\n\n")
+                src_dir = os.path.join(self.active_project_dir, "src")
+                target_dir = src_dir if os.path.exists(src_dir) else self.active_project_dir
+                new_path = os.path.join(target_dir, fname)
+                if not os.path.exists(new_path):
+                    with open(new_path, "w") as f:
+                        f.write("// New Rust file\n")
                 self._refresh_file_tree()
-                self._open_file_in_editor(target_p)
-        dialog.destroy()
+                self._open_file_in_editor(new_path)
+        dlg.destroy()
 
     def _on_new_project_dialog(self, _):
-        dialog = Gtk.Dialog(title="Create New Rust Project", parent=self, flags=0)
-        dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OK, Gtk.ResponseType.OK)
-        box = dialog.get_content_area()
-        box.set_spacing(8)
-        box.set_margin_top(10)
-        box.set_margin_bottom(10)
-        box.set_margin_left(14)
-        box.set_margin_right(14)
-
-        lbl = Gtk.Label(label="Project Name:")
+        dlg = Gtk.Dialog(title="Create New Project", parent=self, flags=Gtk.DialogFlags.MODAL)
+        dlg.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        dlg.add_button("Create", Gtk.ResponseType.OK)
+        box = dlg.get_content_area()
+        lbl = Gtk.Label(label="Project Name (alphanumeric, e.g. my_demo):")
         entry = Gtk.Entry()
         entry.set_text("my_nexus_app")
-        box.pack_start(lbl, False, False, 0)
-        box.pack_start(entry, False, False, 0)
+        box.pack_start(lbl, False, False, 6)
+        box.pack_start(entry, False, False, 6)
+        dlg.show_all()
 
-        tmpl_lbl = Gtk.Label(label="Template:")
-        combo = Gtk.ComboBoxText()
-        for k, v in EXAMPLES.items():
-            combo.append(k, v["title"])
-        combo.set_active(0)
-        box.pack_start(tmpl_lbl, False, False, 0)
-        box.pack_start(combo, False, False, 0)
-        dialog.show_all()
+        if dlg.run() == Gtk.ResponseType.OK:
+            pname = entry.get_text().strip()
+            if pname:
+                new_dir = os.path.join(DEFAULT_WORKSPACE, pname)
+                self._create_empty_project(pname, new_dir)
+                self._set_active_project(new_dir)
+        dlg.destroy()
 
-        res = dialog.run()
-        if res == Gtk.ResponseType.OK:
-            name = entry.get_text().strip()
-            tmpl_key = combo.get_active_id()
-            if name:
-                target_dir = os.path.join(DEFAULT_WORKSPACE, name)
-                self._create_project_from_template(tmpl_key, target_dir)
-                self._set_active_project(target_dir)
-        dialog.destroy()
+    def _create_empty_project(self, name, target_dir):
+        os.makedirs(os.path.join(target_dir, "src"), exist_ok=True)
+        toml_content = f'[package]\nname = "{name}"\nversion = "0.1.0"\nedition = "2021"\n\n[dependencies]\n'
+        main_content = f'// {name} on NEXUS OS\nfn main() {{\n    println!("Hello from {name}!");\n}}\n'
+        with open(os.path.join(target_dir, "Cargo.toml"), "w") as f:
+            f.write(toml_content)
+        with open(os.path.join(target_dir, "src", "main.rs"), "w") as f:
+            f.write(main_content)
+
+    def _create_project_from_template(self, key, target_dir):
+        if key not in EXAMPLES:
+            return
+        os.makedirs(os.path.join(target_dir, "src"), exist_ok=True)
+        with open(os.path.join(target_dir, "Cargo.toml"), "w") as f:
+            f.write(EXAMPLES[key]["toml"])
+        with open(os.path.join(target_dir, "src", "main.rs"), "w") as f:
+            f.write(EXAMPLES[key]["main"])
 
     def _on_open_project_dialog(self, _):
-        dialog = Gtk.FileChooserDialog(
-            title="Choose Project Folder", parent=self, action=Gtk.FileChooserAction.SELECT_FOLDER
+        fc = Gtk.FileChooserDialog(
+            title="Open Project Folder",
+            parent=self,
+            action=Gtk.FileChooserAction.SELECT_FOLDER
         )
-        dialog.add_buttons(Gtk.STOCK_CANCEL, Gtk.ResponseType.CANCEL, Gtk.STOCK_OPEN, Gtk.ResponseType.OK)
-        dialog.set_current_folder(DEFAULT_WORKSPACE)
+        fc.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        fc.add_button("Open", Gtk.ResponseType.OK)
+        fc.set_current_folder(DEFAULT_WORKSPACE)
 
-        res = dialog.run()
-        if res == Gtk.ResponseType.OK:
-            folder = dialog.get_filename()
-            self._set_active_project(folder)
-        dialog.destroy()
-
-    def _create_project_from_template(self, tmpl_key, target_dir):
-        os.makedirs(target_dir, exist_ok=True)
-        src_dir = os.path.join(target_dir, "src")
-        os.makedirs(src_dir, exist_ok=True)
-
-        tmpl = EXAMPLES.get(tmpl_key, EXAMPLES["01_hello_world"])
-        toml_content = tmpl["toml"]
-        main_content = tmpl["main"]
-
-        with open(os.path.join(target_dir, "Cargo.toml"), "w", encoding="utf-8") as f:
-            f.write(toml_content)
-        with open(os.path.join(src_dir, "main.rs"), "w", encoding="utf-8") as f:
-            f.write(main_content)
+        if fc.run() == Gtk.ResponseType.OK:
+            chosen = fc.get_filename()
+            if chosen:
+                self._set_active_project(chosen)
+        fc.destroy()
 
     def _on_example_selected(self, combo):
         key = combo.get_active_id()
         if not key or key not in EXAMPLES:
             return
-        target_dir = os.path.join(DEFAULT_WORKSPACE, key)
-        if not os.path.exists(target_dir):
-            self._create_project_from_template(key, target_dir)
-        self._set_active_project(target_dir)
+        self._load_example_by_key(key)
         combo.set_active(0)
 
     def _on_target_changed(self, combo):
-        mode = combo.get_active_id()
-        self.is_kernel_mode = (mode == "kernel")
+        target = combo.get_active_id()
+        self.is_kernel_mode = (target == "kernel")
         if self.is_kernel_mode:
-            self._log_console("\n[NEXUS Studio] Target switched to: Micro-OS Kernel (no_std, x86_64 / RISC-V)\n")
-            if os.path.exists("/opt/micro-os/src"):
-                self._set_active_project("/opt/micro-os/src")
-            elif os.path.exists(os.path.expanduser("~/micro-os")):
-                self._set_active_project(os.path.expanduser("~/micro-os"))
+            self._log_console("\n[NEXUS Studio] Target switched to: Micro-OS Bare-Metal Kernel (x86_64-unknown-none, no_std)\n")
         else:
             self._log_console("\n[NEXUS Studio] Target switched to: Debian Linux Host (std, Cargo/rustc)\n")
 
@@ -861,9 +1160,6 @@ class RustStudioApp(Gtk.Window):
         self.diag_store.clear()
 
     def _parse_diagnostics(self, stderr_text):
-        # Regex matching typical rustc error format:
-        # error[E0384]: cannot assign twice to immutable variable `x`
-        #  --> src/main.rs:14:5
         err_re = re.compile(r'^(error|warning)(?:\[E\d+\])?: (.*?)$', re.MULTILINE)
         loc_re = re.compile(r'^\s*-->\s*(.*?):(\d+):(\d+)', re.MULTILINE)
 
@@ -893,11 +1189,25 @@ class RustStudioApp(Gtk.Window):
             target_p = os.path.join(self.active_project_dir, file_name)
             if os.path.exists(target_p):
                 self._open_file_in_editor(target_p)
-                # Scroll to line
                 _, buf = self._get_current_editor()
                 if buf and line_no > 0:
                     it_line = buf.get_iter_at_line(line_no - 1)
                     buf.place_cursor(it_line)
+
+    def _find_cargo_root(self, start_path):
+        if not start_path:
+            return None
+        p = os.path.abspath(start_path)
+        if os.path.isfile(p):
+            p = os.path.dirname(p)
+        while True:
+            if os.path.isfile(os.path.join(p, "Cargo.toml")):
+                return p
+            parent = os.path.dirname(p)
+            if parent == p:
+                break
+            p = parent
+        return None
 
     def _run_cargo(self, args):
         if self.active_process and self.active_process.poll() is None:
@@ -908,11 +1218,30 @@ class RustStudioApp(Gtk.Window):
         self._clear_console()
         self.out_notebook.set_current_page(0)
 
-        cmd = ["cargo"] + args
-        if self.is_kernel_mode:
-            cmd = ["cargo", "build", "--target", "x86_64-unknown-none"]
+        cur_file, _ = self._get_current_editor()
+        lookup_path = cur_file if cur_file else self.active_project_dir
+        cargo_root = self._find_cargo_root(lookup_path)
 
-        cwd = self.active_project_dir if self.active_project_dir else DEFAULT_WORKSPACE
+        action = args[0] if args else "run"
+
+        if cargo_root:
+            cwd = cargo_root
+            cmd = ["cargo"] + args
+            if self.is_kernel_mode:
+                cmd = ["cargo", "build", "--target", "x86_64-unknown-none"]
+        elif cur_file and cur_file.endswith(".rs"):
+            cwd = os.path.dirname(cur_file)
+            bin_name = os.path.splitext(os.path.basename(cur_file))[0]
+            bin_path = os.path.join("/tmp", bin_name)
+            if action == "check":
+                cmd = ["rustc", "--emit=metadata", "-o", "/dev/null", cur_file]
+            elif action == "build":
+                cmd = ["rustc", cur_file, "-o", bin_path]
+            else:
+                cmd = ["sh", "-c", f"rustc '{cur_file}' -o '{bin_path}' && '{bin_path}'"]
+        else:
+            cwd = self.active_project_dir if self.active_project_dir else DEFAULT_WORKSPACE
+            cmd = ["cargo"] + args
 
         self._log_console(f"==> Executing: {' '.join(cmd)} in {cwd}\n")
         self.btn_stop.set_sensitive(True)
@@ -922,38 +1251,31 @@ class RustStudioApp(Gtk.Window):
         def worker():
             try:
                 env = os.environ.copy()
+                env["PATH"] = f"/home/student/.cargo/bin:/root/.cargo/bin:/usr/local/bin:/usr/bin:/bin:{env.get('PATH', '')}"
                 env["RUST_BACKTRACE"] = "1"
+                env["CARGO_TERM_COLOR"] = "never"
+
                 proc = subprocess.Popen(
                     cmd,
                     cwd=cwd,
                     stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
                     text=True,
                     bufsize=1,
-                    env=env
+                    env=env,
+                    start_new_session=True  # Enables clean process group kill
                 )
                 self.active_process = proc
 
-                all_stderr = []
+                all_output = []
+                for line in proc.stdout:
+                    all_output.append(line)
+                    self._log_console(line)
 
-                def stream_pipe(pipe, is_err=False):
-                    for line in pipe:
-                        if is_err:
-                            all_stderr.append(line)
-                        self._log_console(line)
-
-                t1 = threading.Thread(target=stream_pipe, args=(proc.stdout, False), daemon=True)
-                t2 = threading.Thread(target=stream_pipe, args=(proc.stderr, True), daemon=True)
-                t1.start()
-                t2.start()
-
-                t1.join()
-                t2.join()
                 rc = proc.wait()
+                full_text = "".join(all_output)
 
-                err_joined = "".join(all_stderr)
-                if err_joined:
-                    GLib.idle_add(self._parse_diagnostics, err_joined)
+                GLib.idle_add(self._parse_diagnostics, full_text)
 
                 def on_done():
                     self.btn_stop.set_sensitive(False)
@@ -979,17 +1301,23 @@ class RustStudioApp(Gtk.Window):
 
     def _on_stop_process(self, _):
         if self.active_process and self.active_process.poll() is None:
-            self._log_console("\n[NEXUS Studio] Sending SIGKILL to active process...\n")
+            self._log_console("\n[NEXUS Studio] Terminating process group...\n")
             try:
-                self.active_process.kill()
+                os.killpg(os.getpgid(self.active_process.pid), signal.SIGTERM)
+                time.sleep(0.1)
+                if self.active_process.poll() is None:
+                    os.killpg(os.getpgid(self.active_process.pid), signal.SIGKILL)
             except OSError:
-                pass
+                try:
+                    self.active_process.kill()
+                except OSError:
+                    pass
             self.btn_stop.set_sensitive(False)
 
     def _on_launch_external_term(self, _):
         cwd = self.active_project_dir if self.active_project_dir else DEFAULT_WORKSPACE
         try:
-            subprocess.Popen(["xfce4-terminal", f"--working-directory={cwd}"])
+            subprocess.Popen(["xfce4-terminal", f"--working-directory={cwd}"], start_new_session=True)
         except Exception as e:
             self._log_console(f"Failed to launch terminal: {e}\n")
 

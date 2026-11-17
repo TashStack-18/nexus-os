@@ -1,11 +1,11 @@
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Rust Development Studio
-Comment=Develop, compile, and execute Rust projects
-Exec=nexus-studio
+Name=Rust Studio
+Comment=LUNARA Rust Development Studio
+Exec=lunara-studio
 Icon=applications-development
 Categories=Development;IDE;
 Terminal=false
 StartupNotify=true
-StartupWMClass=nexus-studio
+StartupWMClass=lunara-studio

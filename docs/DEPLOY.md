@@ -1,8 +1,9 @@
-# NEXUS OS — Deployment, Demonstration & Verification Guide
+# LUNARA OS — Deployment, Demonstration & Verification Guide
 
 **Author**: Tashvi Adhlakha (Registration: 25BTRCL271)  
-**Deliverable**: `nexus-os-v2.iso` & `nexus-os.iso` (Unified Hybrid Bootable Operating System)  
-**Backup**: `nexus-os-backup.iso` (Preserved original build)  
+**Deliverable**: `lunara-os-final.iso` (Unified Hybrid Bootable Operating System)  
+**Mirrored Target**: `C:\Users\Tashvi\Downloads\lunara-os-final.iso`  
+**Preserved Backups**: `nexus-os-backup.iso`, `nexus-os.iso`, `nexus-os-v2.iso`, `nexus-os-final.iso`, `nexus-os-final-v2.iso`  
 **Target Tracks**: Track A (Scheduler Engineering) & Track G (Research-to-Kernel Evaluation)  
 **CA-6 Academic Compliance**: 10/10 Core Educational Micro-OS Mechanisms Verified (68/68 Automated Tests Passing)
 
@@ -10,31 +11,57 @@
 
 ## 1. Executive Summary & Architecture
 
-NEXUS OS unifies two operating system personalities into **one single bootable ISO (`nexus-os.iso` / `nexus-os-v2.iso`)**:
+LUNARA OS unifies educational kernel engineering and a responsive desktop into **ONE single bootable ISO (`lunara-os-final.iso`)**:
 
 ```
                        ┌─────────────────────────────────────────────────────────────┐
-                       │                   NEXUS OS HYBRID ISO                       │
-                       │               (nexus-os.iso / nexus-os-v2.iso)              │
+                       │                   LUNARA OS HYBRID ISO                      │
+                       │                  (lunara-os-final.iso)                      │
                        └──────────────────────────────┬──────────────────────────────┘
                                                       │
                        ┌──────────────────────────────┴──────────────────────────────┐
-                       │                   GRUB2 MULTIBOOT LOADER                    │
-                       └──────────────┬───────────────────────────────┬──────────────┘
-                                      │                               │
-             ┌────────────────────────┴────────┐     ┌────────────────┴──────────────┐
-             │         ENTRY 1 (DEFAULT)       │     │         ENTRY 2 / 3 / 4 / 5   │
-             │     NEXUS OS LIVE DESKTOP       │     │   NEXUS MICRO-OS RUST KERNEL  │
-             │   (Debian 13 Trixie + Xfce4)    │     │       (Bare-Metal x86-64)     │
-             ├─────────────────────────────────┤     ├───────────────────────────────┤
-             │ • Clean minimal modern desktop  │     │ • Direct hardware boot <0.2s  │
-             │ • Slim top panel & centered dock│     │ • Ring 0 privilege level      │
-             │ • Full-screen PAM lock screen   │     │ • Real PIT timer & interrupts │
-             │ • Window lifecycle & dock sync  │     │ • Direct VGA/Bochs VBE display│
-             │ • Rust Development Studio       │     │ • 68/68 Academic checks (TCs) │
-             │ • NEXUS Lab (Scheduler/Research)│     │ • RR, SJF, MLFQ policies      │
-             │ • Real-time Task Manager        │     │ • Immediate-mode kernel shell │
-             └─────────────────────────────────┘     └───────────────────────────────┘
+                       │          GRUB2 3-MODE BOOTLOADER (10s Countdown)            │
+                       │    (Visible menu: dual gfxterm + console output, colors)    │
+                       └──────────────┬───────────────┬──────────────────────────────┘
+                                      │               │               │
+        ┌─────────────────────────────┴──┐            │               └────────────────────────────┐
+        │       ENTRY 1 (DEFAULT)        │            │                                            │
+        │      LUNARA OS LIVE DESKTOP    │            │                                            │
+        │    (Debian 13 Trixie + Xfce4)  │            │                                            │
+        ├────────────────────────────────┤            │                                            │
+        │ • Deep plum & mauve aesthetic  │            │                                            │
+        │ • Slim top panel & bottom dock │            │                                            │
+        │ • Centered clock & date        │            │                                            │
+        │ • Left desktop shortcut stack  │            │                                            │
+        │ • Right System Vitals widget   │            │                                            │
+        │ • Full-screen PAM lock screen  │            │                                            │
+        │ • Rust Studio (lunara-studio)  │            │                                            │
+        │ • NEXUS Lab (strictly intact)  │            │                                            │
+        │ • Task Manager (lunara-tasks)  │            │                                            │
+        └────────────────────────────────┘            │                                            │
+                                                      │                                            │
+                                      ┌───────────────┴───────────────┐                            │
+                                      │           ENTRY 2             │                            │
+                                      │   LUNARA MICRO-OS (x86-64)    │                            │
+                                      │   (Bare-Metal, Instant Boot)  │                            │
+                                      ├───────────────────────────────┤                            │
+                                      │ • Direct hardware boot <0.2s  │                            │
+                                      │ • Ring 0 privilege level      │                            │
+                                      │ • Direct VGA / VBE console    │                            │
+                                      │ • Multiboot2 boot protocol    │                            │
+                                      │ • Interactive kernel shell    │                            │
+                                      └───────────────────────────────┘                            │
+                                                                                                   │
+                                                      ┌────────────────────────────────────────────┴─┐
+                                                      │                   ENTRY 3                    │
+                                                      │         ACADEMIC VERIFICATION SUITE          │
+                                                      │             (TC1–TC6, 68 Checks)             │
+                                                      ├──────────────────────────────────────────────┤
+                                                      │ • Automated kernel test harness execution    │
+                                                      │ • 68/68 in-kernel assertions verified        │
+                                                      │ • PIT timer, preemptive scheduler, heap      │
+                                                      │ • Sync primitives, TCBs, and system calls    │
+                                                      └──────────────────────────────────────────────┘
 ```
 
 1. **NEXUS Live Desktop**: A high-performance, responsive live environment running on Debian 13 with lightweight Xfce4, Xfwm4 hardware compositing, a minimal modern interface, and three custom GTK3 applications:
@@ -98,20 +125,21 @@ To ensure maximum responsiveness and eliminate VM display lag, configure Virtual
 
 ## 4. Boot Options & GRUB Menu Reference
 
-When booting `nexus-os.iso`, GRUB displays 6 options:
+When booting `lunara-os-final.iso`, GRUB visibly displays a 10-second countdown with the LUNARA plum/magenta theme and 3 independently selectable, genuine environments:
 
-1. **`NEXUS OS — Live Desktop (Rust Studio, Lab & Tasks)`** *(Default, boots in 5s)*:
-   Boots into the full live desktop environment with Rust Studio, NEXUS Lab, Task Manager, NetworkManager, and hardware drivers.
-2. **`NEXUS Micro-OS — Rust Kernel (Bare-Metal x86-64, Instant Boot)`**:
-   Boots the bare-metal Rust microkernel directly on hardware/VM in ring 0 in **<0.2 seconds**. Displays the native kernel console, memory maps, TCB states, and interactive shell.
-3. **`NEXUS Micro-OS — Academic Verification Suite (TC1-TC6, 68 Checks)`**:
-   Runs the full automated academic test suite verifying all 68 kernel assertions (boot, GDT/IDT, heap allocator, ready queue, RR scheduler, timer preemptions, synchronization primitives).
-4. **`NEXUS Micro-OS — Shortest Job First (SJF) Scheduler`**:
-   Boots the microkernel with the SJF scheduling algorithm policy selected.
-5. **`NEXUS Micro-OS — Multi-Level Feedback Queue (MLFQ) Scheduler`**:
-   Boots the microkernel with the dynamic 3-level priority feedback queue policy.
-6. **`NEXUS OS — Live (Text Console Debug Mode)`**:
-   Boots Linux with verbose kernel messages directly to text console (tty0/ttyS0).
+1. **`LUNARA OS — Live Desktop (Rust Studio, Lab & Tasks)`** *(Default, boots into live desktop)*:
+   Boots into the full live desktop environment featuring the LUNARA deep plum aesthetic, floating System Vitals panel, centered dock, Rust Studio (`lunara-studio`), NEXUS Lab (`nexus-lab`), Task Manager (`lunara-tasks`), NetworkManager, and hardware drivers.
+2. **`LUNARA Micro-OS — Rust Kernel (Bare-Metal x86-64, Instant Boot)`**:
+   Boots the bare-metal Rust microkernel directly on hardware/VM in ring 0 in **<0.2 seconds** without loading Linux. Displays the native kernel console, memory maps, TCB states, PIT timer interrupts, and the interactive microkernel shell.
+3. **`LUNARA Micro-OS — Academic Verification Suite (TC1–TC6, 68 Checks)`**:
+   Boots the bare-metal Rust microkernel directly into the automated academic verification suite, executing all 68 in-kernel assertions across TC1–TC6 (bootloader validation, GDT/IDT trap handling, heap allocator, intrusive ready queue, preemptive Round Robin scheduler, timer interrupts, synchronization primitives, and system call boundaries).
+
+> [!NOTE]
+> **Why the boot menu is guaranteed visible**:
+> 1. `set timeout_style=menu` explicitly prevents GRUB from hiding or suppressing the menu.
+> 2. `set timeout=10` provides 10 full seconds for VirtualBox resolution negotiation before defaulting to the desktop.
+> 3. `terminal_output gfxterm console` ensures dual output to both VESA/GOP framebuffer and the hardware BIOS console.
+> 4. `loadfont /boot/grub/fonts/unicode.pf2` ensures character glyphs are loaded before graphical rendering begins.
 
 ---
 

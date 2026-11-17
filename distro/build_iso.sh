@@ -12,11 +12,11 @@ HERE="$(cd "$(dirname "$0")" && pwd)"
 ROOT="$(dirname "$HERE")"
 IMG="$HERE/out/microos-s6.img"
 WORK="$HERE/build/iso"
-ISO="${ISO:-$HERE/out/nexus-os-v2.iso}"
+ISO="${ISO:-$HERE/out/lunara-os-final.iso}"
 ELF_RISCV="$ROOT/kernel/target/riscv64gc-unknown-none-elf/release/microos"
 ELF_X86="$ROOT/kernel/target/x86_64-unknown-none/release/microos"
 PROXY="http://127.0.0.1:3142"   # apt-cacher-ng
-log() { echo "[nexus-iso] $*"; }
+log() { echo "[lunara-iso] $*"; }
 
 [ -f "$IMG" ] || { echo "missing $IMG (run build.sh 6)" >&2; exit 1; }
 
@@ -99,6 +99,11 @@ for k, v in mod.EXAMPLES.items():
     with open(os.path.join(p_dir, 'src', 'main.rs'), 'w') as f: f.write(v['main'])
 " 2>/dev/null || true
 chroot "$R" chown -R student:student /home/student/nexus_rust_projects 2>/dev/null || true
+if [ -d "$R/home/tashvi" ]; then
+    mkdir -p "$R/home/tashvi/nexus_rust_projects"
+    cp -r "$H/nexus_rust_projects/." "$R/home/tashvi/nexus_rust_projects/"
+    chroot "$R" chown -R tashvi:tashvi /home/tashvi/nexus_rust_projects 2>/dev/null || true
+fi
 
 log "finalizing live system overlay configuration"
 printf '# Live system: root overlay in RAM\n' > "$R/etc/fstab"
@@ -114,53 +119,66 @@ cp "$R/boot/initrd.img-$KVER" "$WORK/iso/live/initrd.img"
 log "copying bare-metal x86-64 Rust Micro-OS kernel to ISO boot"
 cp "$ELF_X86" "$WORK/iso/boot/microos_x86.elf"
 
+log "ensuring GRUB unicode font is present for graphical bootloader menu"
+mkdir -p "$WORK/iso/boot/grub/fonts"
+if [ -f /usr/share/grub/unicode.pf2 ]; then
+    cp /usr/share/grub/unicode.pf2 "$WORK/iso/boot/grub/fonts/unicode.pf2"
+fi
+
 log "compressing root file system (squashfs, xz)"
 mksquashfs "$R" "$WORK/iso/live/filesystem.squashfs" -comp xz -e boot/efi -noappend -quiet
 
-log "generating Multiboot2 / GRUB configuration for dual-boot"
+log "generating Multiboot2 / GRUB configuration for 3-mode boot menu"
+mkdir -p "$WORK/iso/boot/grub" "$WORK/iso/efi/boot"
 cat > "$WORK/iso/boot/grub/grub.cfg" <<'EOF'
-set timeout=5
+# LUNARA OS — 3-Mode Boot Menu Configuration
+set timeout_style=menu
+set timeout=10
 set default=0
 
+# Start with console terminal active immediately so output is guaranteed on every hardware/VM
+terminal_input console
+terminal_output console
+
+# Load Unicode font to ensure graphical menu renders glyphs cleanly
+if [ -s /boot/grub/fonts/unicode.pf2 ]; then
+    loadfont /boot/grub/fonts/unicode.pf2
+fi
+
+# Enable gfxterm using safe VESA modes natively supported by VirtualBox VESA BIOS
 insmod all_video
 insmod gfxterm
-set gfxmode=1920x1080x32,1600x900x32,1366x768x32,1280x720x32,1024x768x32,auto
+set gfxmode=1024x768,auto
 set gfxpayload=keep
-terminal_output gfxterm
+terminal_output gfxterm console
 
-menuentry "NEXUS OS — Live Desktop (Rust Studio, Lab & Tasks)" {
-    linux /live/vmlinuz boot=live quiet console=ttyS0,115200 console=tty0
+# LUNARA Plum/Pink Color Scheme
+set menu_color_normal=light-magenta/black
+set menu_color_highlight=white/magenta
+set color_normal=light-gray/black
+set color_highlight=white/magenta
+
+menuentry "LUNARA OS — Live Desktop (Rust Studio, Lab & Tasks)" {
+    linux /live/vmlinuz boot=live quiet console=tty0
     initrd /live/initrd.img
 }
 
-menuentry "NEXUS Micro-OS — Rust Kernel (Bare-Metal x86-64, Instant Boot)" {
+menuentry "LUNARA Micro-OS — Rust Kernel (Bare-Metal x86-64)" {
     multiboot2 /boot/microos_x86.elf test=shell trace=0
     boot
 }
 
-menuentry "NEXUS Micro-OS — Academic Verification Suite (TC1-TC6, 68 Checks)" {
+menuentry "LUNARA Micro-OS — Academic Verification Suite (TC1–TC6, 68 Checks)" {
     multiboot2 /boot/microos_x86.elf test=all trace=0
     boot
 }
-
-menuentry "NEXUS Micro-OS — Shortest Job First (SJF) Scheduler" {
-    multiboot2 /boot/microos_x86.elf test=shell trace=0 policy=sjf
-    boot
-}
-
-menuentry "NEXUS Micro-OS — Multi-Level Feedback Queue (MLFQ) Scheduler" {
-    multiboot2 /boot/microos_x86.elf test=shell trace=0 policy=mlfq
-    boot
-}
-
-menuentry "NEXUS OS — Live (Text Console Debug Mode)" {
-    linux /live/vmlinuz boot=live console=ttyS0,115200 console=tty0
-    initrd /live/initrd.img
-}
 EOF
 
+# Copy grub.cfg to EFI boot path as well
+cp "$WORK/iso/boot/grub/grub.cfg" "$WORK/iso/efi/boot/grub.cfg"
+
 log "writing hybrid bootable ISO (BIOS + UEFI)"
-grub-mkrescue -o "$ISO" "$WORK/iso" -- -volid NEXUS_OS >/dev/null 2>&1
+grub-mkrescue -o "$ISO" "$WORK/iso" -- -volid LUNARA_OS >/dev/null 2>&1
 rm -rf "$R"
 
 log "done: $ISO ($(du -h "$ISO" | cut -f1))"
@@ -171,6 +189,4 @@ if [ -d "/mnt/c/Users/Tashvi/Downloads" ]; then
     log "mirroring to /mnt/c/Users/Tashvi/Downloads/$(basename "$ISO")"
     cp "$ISO" "/mnt/c/Users/Tashvi/Downloads/$(basename "$ISO")"
     cp "$ISO.sha256" "/mnt/c/Users/Tashvi/Downloads/$(basename "$ISO").sha256"
-    cp "$ISO" /mnt/c/Users/Tashvi/Downloads/nexus-os.iso
-    cp "$ISO.sha256" /mnt/c/Users/Tashvi/Downloads/nexus-os.iso.sha256
 fi
