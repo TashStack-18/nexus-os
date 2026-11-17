@@ -289,8 +289,8 @@ conky.config = {
 };
 
 conky.text = [[
-${alignc}${font DejaVu Sans:size=72:weight=bold}${color}${time %H:%M}
-${voffset -10}${alignc}${font DejaVu Sans:size=15}${color1}${time %A, %d %B %Y}
+${alignc}${font DejaVu Sans:size=56:weight=bold}${color}${time %H:%M}
+${voffset 2}${alignc}${font DejaVu Sans:size=14}${color1}${time %A, %d %B %Y}
 ]];
 CONKY
 
