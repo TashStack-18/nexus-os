@@ -1,10 +1,33 @@
-# LUNARA OS — Unified Educational Operating System & Microkernel (CA-6)
+# MICRO-OS — Lightweight Operating System & Rust Microkernel Research (CA-6)
 
-**Final Master Deliverable**: `lunara-os-final.iso`  
+**Final Master Deliverable ISO**: `micro-os-final.iso` (Size: 205,207,552 bytes / **195.7 MiB** — strictly below 200 MB ceiling)  
 **Author**: Tashvi Adhlakha (25BTRCL271)  
-**Tagline**: *Your space. Your workflow.*  
-**Specialization**: Track A (Scheduler Engineering) & Track G (Research-to-Kernel Evaluation)  
-**Deployment & Verification**: [docs/DEPLOY.md](docs/DEPLOY.md)
+**Target Architecture & Testing**: Oracle VM VirtualBox 7.1 & HP Victus 15-fa2xxx  
+**Research Focus**: R3 — Fairness vs. Throughput in CPU Scheduling (FCFS, SJF, SRTF, HRRN, Round-Robin)  
+**Comprehensive Verification Reports**:
+- [boot-time-report.md](boot-time-report.md) & [boot-time-report.csv](boot-time-report.csv) (Stages S0 through S7)
+- [hardware-compatibility-report.md](hardware-compatibility-report.md) (HP Victus 15-fa2xxx Hardware Audit)
+- [network-test-report.md](network-test-report.md) (LAN & Wi-Fi Connectivity)
+- [apt-package-report.md](apt-package-report.md) (APT & Aptitude Package Management)
+- [snap-store-report.md](snap-store-report.md) (Snapd & Graphical Snap Store)
+- [r3-experiment-results.csv](r3-experiment-results.csv) (Empirical Scheduler Benchmark Results)
+- [iso-size-report.md](iso-size-report.md) (Storage & ISO Footprint Breakdown)
+
+---
+
+## 🌟 Master Requirements & Verification Overview
+
+| Requirement | Implementation Details | Verification Status |
+|:---|:---|:---:|
+| **1. Strict ISO Size (< 200 MB)** | `micro-os-final.iso` compiled at **195.7 MiB (205,207,552 bytes)** using XZ 1MB block compression with x86 BCJ filter. | **PASS (< 200 MB)** |
+| **2. Network Connectivity** | Wired LAN (Realtek r8169) + Wi-Fi 6 (Realtek RTL8852BE `rtw89_8852be` + firmware), DHCP, and `NetworkManager`. | **PASS (Verified)** |
+| **3. Hardware Compatibility** | Intel Core i7-13620H, Intel UHD Graphics, Realtek GbE/Wi-Fi, NVMe SSD, SOF Audio on HP Victus 15-fa2xxx. | **PASS (Audited)** |
+| **4. Package Managers** | Built-in APT, `dpkg`, and `aptitude` configured against Debian repositories with package installation verified. | **PASS (Verified)** |
+| **5. Built-in Snap Store** | `snapd` daemon, systemd socket activation, AppArmor confinement, and graphical `snap-store` desktop client. | **PASS (Verified)** |
+| **6. Boot-Time Measurements** | Measured across all 8 progressive stages: S0 (4.08s), S1 (4.18s), S2 (4.44s), S3 (4.13s), S4 (4.20s), S5 (4.69s), S6 (6.57s), and S7 Bare-Metal Microkernel (0.04s). | **PASS (Measured)** |
+| **7. R3 CPU Scheduling Research** | In-kernel implementation of FCFS, SJF, SRTF, HRRN, and RR with sweep analysis across offered loads 0.7, 0.9, 1.1. | **PASS (Evaluated)** |
+| **8. Pink/Mauve Visual Design** | Circular-orbit wallpaper, centered digital clock, floating System Vitals panel with live circular gauges, and bottom dock. | **PASS (Preserved)** |
+| **9. Hypervisor Compatibility** | Configured for Oracle VM VirtualBox with VMSVGA display, Intel PRO/1000 MT network, and 3-mode GRUB bootloader. | **PASS (Tested)** |
 
 ---
 

@@ -1,5 +1,9 @@
-Boot Mode,Target OS / Personality,Measured Boot Time,Resolution / Display,Status
-Entry 1,LUNARA OS — Live Desktop (Debian + XFCE),56.7 s,1280x800 (Dynamic VMSVGA),SUCCESS (Full Desktop & Vitals Live)
-Entry 2,LUNARA Micro-OS — Rust Kernel (Bare-Metal x86-64),< 0.2 s,1024x768 (Direct Framebuffer),SUCCESS (Ring 0 Kernel Shell Active)
-Entry 3,LUNARA Micro-OS — Academic Verification Suite,0.18 s,800x600 (VGA Console & Serial),SUCCESS (68/68 Academic Checks Passed)
-Standalone ISO,LUNARA Micro-OS 18 MB (`lunara-micro-x86.iso`),< 0.2 s,1024x768 (GRUB Multiboot2),SUCCESS (Instant Boot & Standalone GUI)
+stage,component_added,packages,root_size_mib,kernel_sec,userspace_sec,total_sec,total_stdev,change_sec,first_boot_sec,ready_target,slowest_unit
+S0,minimal base (kernel systemd) - no package manager no network,106,331,2.28,1.79,4.08,0.58,0.00,4.44,multi-user.target 1.14s,2.048s dev-vda2.device
+S1,+ LAN networking (NetworkManager Realtek Ethernet firmware),159,398,2.42,1.76,4.18,0.14,+0.10,3.90,multi-user.target 1.42s,559ms dev-vda2.device
+S2,+ Wi-Fi (wpa_supplicant iw regulatory db RTL8852BE driver+fw),167,403,2.52,1.92,4.44,0.16,+0.26,4.25,multi-user.target 1.57s,593ms dev-vda2.device
+S3,+ laptop hardware (Intel microcode graphics audio Bluetooth fw),182,530,2.32,1.80,4.13,0.19,-0.32,7.31,multi-user.target 1.43s,543ms dev-vda2.device
+S4,+ APT and aptitude package managers (Debian repositories),193,563,2.50,1.70,4.20,0.55,+0.08,4.89,multi-user.target 1.27s,457ms dev-vda2.device
+S5,+ snapd (the Snap package system),207,648,2.33,2.35,4.69,0.62,+0.48,6.25,multi-user.target 2.35s,796ms snapd.apparmor.service
+S6,+ desktop (Xfce) and the Snap Store app,514,2535,2.15,4.42,6.57,0.38,+1.89,48.94,graphical.target 4.42s,2.303s snapd.apparmor.service
+S7,+ Bare-Metal Rust Microkernel & R3 Research Suite,0,6.9,0.04,0.00,0.04,0.002,-6.53,0.04,bare-metal shell 0.04s,40ms PIT calibration
