@@ -21,12 +21,26 @@ chroot "$R" env DEBIAN_FRONTEND=noninteractive apt-get -o Acquire::http::Proxy="
     xfce4-screensaver fonts-dejavu-core papirus-icon-theme librsvg2-common \
     mupdf python3 python3-gi python3-gi-cairo gir1.2-gtk-3.0 \
     firefox-esr conky-all xfce4-settings xfce4-appfinder \
-    virtualbox-guest-x11 virtualbox-guest-utils \
-    >/dev/null 2>&1 || true
+    xserver-xorg-video-vmware xserver-xorg-video-fbdev xserver-xorg-video-vesa \
+    >/dev/null 2>&1 || chroot "$R" env DEBIAN_FRONTEND=noninteractive apt-get -y \
+    --no-install-recommends install \
+    xfce4-screensaver fonts-dejavu-core papirus-icon-theme librsvg2-common \
+    mupdf python3 python3-gi python3-gi-cairo gir1.2-gtk-3.0 \
+    firefox-esr conky-all xfce4-settings xfce4-appfinder \
+    xserver-xorg-video-vmware xserver-xorg-video-fbdev xserver-xorg-video-vesa || true
+
+# Rebuild icon cache for Papirus so XFCE immediately resolves every application icon
+chroot "$R" gtk-update-icon-cache -f -t /usr/share/icons/Papirus-Dark 2>/dev/null || true
+chroot "$R" gtk-update-icon-cache -f -t /usr/share/icons/Papirus 2>/dev/null || true
 
 log "rendering modern LUNARA wallpaper, lock-screen background, and user avatar"
-mkdir -p "$R/usr/share/backgrounds" "$R/usr/share/pixmaps"
+mkdir -p "$R/usr/share/backgrounds/xfce" "$R/usr/share/pixmaps"
 python3 "$HERE/theme/make_art.py" "$R/usr/share/backgrounds/lunara.png" "$R/usr/share/backgrounds/lunara-lock.png" "$R/usr/share/pixmaps/lunara-avatar.png"
+
+# Overwrite all XFCE default wallpapers so any fallback points to LUNARA
+for bg in "$R/usr/share/backgrounds/xfce"/*; do
+    [ -f "$bg" ] && cp -f "$R/usr/share/backgrounds/lunara.png" "$bg" 2>/dev/null || true
+done
 
 # Symlinks for backwards compatibility
 ln -sf /usr/share/backgrounds/lunara.png "$R/usr/share/backgrounds/nexus.png" 2>/dev/null || true
@@ -145,6 +159,8 @@ ln -sf /usr/share/applications/lunara-tasks.desktop "$R/usr/share/applications/n
 # 4. Floating System Vitals Desktop Widget
 install -m 0755 "$HERE/theme/lunara-vitals" "$R/usr/local/bin/lunara-vitals"
 install -m 0644 "$HERE/theme/lunara-vitals.desktop" "$R/usr/share/applications/lunara-vitals.desktop"
+mkdir -p "$R/etc/xdg/autostart"
+install -m 0644 "$HERE/theme/lunara-vitals.desktop" "$R/etc/xdg/autostart/lunara-vitals.desktop"
 
 # 5. Lock Screen launcher
 cat > "$R/usr/share/applications/lunara-lock.desktop" <<CONF
@@ -252,11 +268,60 @@ CONF
 {
     echo '<?xml version="1.0" encoding="UTF-8"?>'
     echo '<channel name="xfce4-desktop" version="1.0"><property name="backdrop" type="empty"><property name="screen0" type="empty">'
-    for m in monitor0 monitorVirtual-1 monitorVGA-1 monitoreDP-1 monitorLVDS-1 monitorHDMI-1; do
+    for m in monitor0 monitor1 monitorVirtual0 monitorVirtual1 monitorVirtual2 monitorVirtual-0 monitorVirtual-1 monitorVirtual-2 monitorVGA-1 monitorVGA1 monitoreDP-1 monitoreDP1 monitorLVDS-1 monitorLVDS1 monitorHDMI-1 monitorHDMI1 default; do
         echo "<property name=\"$m\" type=\"empty\"><property name=\"workspace0\" type=\"empty\"><property name=\"color-style\" type=\"int\" value=\"0\"/><property name=\"image-style\" type=\"int\" value=\"5\"/><property name=\"last-image\" type=\"string\" value=\"/usr/share/backgrounds/lunara.png\"/></property></property>"
     done
     echo '</property></property><property name="desktop-icons" type="empty"><property name="style" type="int" value="2"/><property name="file-icons" type="empty"><property name="show-home" type="bool" value="false"/><property name="show-trash" type="bool" value="false"/><property name="show-filesystem" type="bool" value="false"/><property name="show-removable" type="bool" value="false"/></property></property></channel>'
 } > "$X/xfce4-desktop.xml"
+
+# Pre-seed desktop icon positions matching reference collage order:
+# Home -> Rust Studio -> NEXUS Lab -> Terminal -> File Manager
+mkdir -p "$H/.config/xfce4/desktop"
+cat > "$H/.config/xfce4/desktop/icons.screen0.rc" <<'ICONS'
+[01-home.desktop]
+row=0
+col=0
+
+[02-studio.desktop]
+row=1
+col=0
+
+[03-lab.desktop]
+row=2
+col=0
+
+[04-terminal.desktop]
+row=3
+col=0
+
+[05-files.desktop]
+row=4
+col=0
+
+[Home]
+row=0
+col=0
+
+[Rust Studio]
+row=1
+col=0
+
+[NEXUS Lab]
+row=2
+col=0
+
+[Terminal]
+row=3
+col=0
+
+[File Manager]
+row=4
+col=0
+ICONS
+
+for res in 1024x768 1280x800 1366x768 1440x900 1920x1080; do
+    cp "$H/.config/xfce4/desktop/icons.screen0.rc" "$H/.config/xfce4/desktop/icons.screen0-${res}.rc" 2>/dev/null || true
+done
 
 # Desktop Widgets: Split architecture matching Primary Reference Collage
 # 1. Clean centered large digital clock + date (aligned between LUNARA OS branding and divider line)
@@ -268,8 +333,8 @@ conky.config = {
     alignment = 'top_middle',
     gap_x = 0,
     gap_y = 110,
-    minimum_width = 460,
-    maximum_width = 600,
+    minimum_width = 240,
+    maximum_width = 300,
     own_window = true,
     own_window_type = 'desktop',
     own_window_transparent = true,
@@ -290,8 +355,8 @@ conky.config = {
 };
 
 conky.text = [[
-${alignc}${font DejaVu Sans:size=64:weight=bold}${color}${time %H:%M}
-${voffset 10}${alignc}${font DejaVu Sans:size=18}${color1}${time %d.%m.%Y}
+${alignc}${font DejaVu Sans:size=52:weight=bold}${color}${time %H:%M}
+${voffset 8}${alignc}${font DejaVu Sans:size=16}${color1}${time %d.%m.%Y}
 ]];
 CONKY
 
@@ -448,47 +513,25 @@ CONF
 
 # Desktop shortcuts in ~/Desktop (Matching Reference Collage Left Column!)
 log "populating desktop shortcuts matching reference collage"
-cat > "$H/Desktop/01-terminal.desktop" <<CONF
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=Xfce Terminal
-Comment=Terminal Emulator
-Exec=xfce4-terminal
-Icon=utilities-terminal
-Terminal=false
-Categories=System;TerminalEmulator;
-CONF
+rm -f "$H/Desktop"/*.desktop 2>/dev/null || true
 
-cat > "$H/Desktop/02-files.desktop" <<CONF
+cat > "$H/Desktop/01-home.desktop" <<CONF
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Thunar File Manager
-Comment=Browse files and folders
-Exec=thunar
-Icon=system-file-manager
+Name=Home
+Comment=Student Home Directory
+Exec=thunar /home/student
+Icon=user-home
 Terminal=false
 Categories=System;FileManager;
 CONF
 
-cat > "$H/Desktop/03-tasks.desktop" <<CONF
+cat > "$H/Desktop/02-studio.desktop" <<CONF
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Task Manager & System Monitor
-Comment=Monitor system resources and processes
-Exec=lunara-tasks
-Icon=utilities-system-monitor
-Terminal=false
-Categories=System;Monitor;
-CONF
-
-cat > "$H/Desktop/04-studio.desktop" <<CONF
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=Rust Development Studio
+Name=Rust Studio
 Comment=LUNARA Rust Development Studio
 Exec=lunara-studio
 Icon=applications-development
@@ -496,7 +539,7 @@ Terminal=false
 Categories=Development;
 CONF
 
-cat > "$H/Desktop/05-lab.desktop" <<CONF
+cat > "$H/Desktop/03-lab.desktop" <<CONF
 [Desktop Entry]
 Version=1.0
 Type=Application
@@ -508,16 +551,28 @@ Terminal=false
 Categories=Science;
 CONF
 
-cat > "$H/Desktop/06-browser.desktop" <<CONF
+cat > "$H/Desktop/04-terminal.desktop" <<CONF
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Web Browser
-Comment=Access the internet
-Exec=firefox-esr
-Icon=web-browser
+Name=Terminal
+Comment=Xfce Terminal Emulator
+Exec=xfce4-terminal
+Icon=utilities-terminal
 Terminal=false
-Categories=Network;WebBrowser;
+Categories=System;TerminalEmulator;
+CONF
+
+cat > "$H/Desktop/05-files.desktop" <<CONF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=File Manager
+Comment=Browse files and folders
+Exec=thunar
+Icon=system-file-manager
+Terminal=false
+Categories=System;FileManager;
 CONF
 
 chmod 0755 "$H/Desktop"/*.desktop 2>/dev/null || true
@@ -602,6 +657,13 @@ if [ -n "$out" ]; then
     fi
     # Automatically adapt to VirtualBox window dimensions without stretching!
     xrandr --auto 2>/dev/null || true
+fi
+
+# Ensure XFCE desktop background is explicitly set to lunara.png on active monitors
+if command -v xfconf-query >/dev/null 2>&1; then
+    for prop in $(xfconf-query -c xfce4-desktop -l 2>/dev/null | grep 'last-image'); do
+        xfconf-query -c xfce4-desktop -p "$prop" -s "/usr/share/backgrounds/lunara.png" 2>/dev/null || true
+    done
 fi
 
 # Start background auto-resizer loop (tracks VirtualBox window resizing dynamically)

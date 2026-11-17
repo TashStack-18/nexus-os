@@ -13,6 +13,7 @@ import os
 import sys
 import time
 import math
+import platform
 import gi
 
 gi.require_version("Gtk", "3.0")
@@ -128,8 +129,8 @@ class LunaraVitalsWindow(Gtk.Window):
     def __init__(self):
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
         self.stats = SystemStats()
-        self.card_w = 340
-        self.card_h = 430
+        self.card_w = 320
+        self.card_h = 380
 
         # Configure as borderless desktop overlay widget
         self.set_title("LUNARA System Vitals")
@@ -155,6 +156,7 @@ class LunaraVitalsWindow(Gtk.Window):
         # Reposition on right side
         self._position_window()
         screen.connect("size-changed", lambda s: self._position_window())
+        screen.connect("monitors-changed", lambda s: self._position_window())
 
         # Update timer: every 2000ms
         GLib.timeout_add(2000, self._on_timer)
@@ -162,20 +164,21 @@ class LunaraVitalsWindow(Gtk.Window):
     def _position_window(self):
         screen = self.get_screen()
         sw = screen.get_width()
-        # Margin from right edge is 40px, top is 60px below top bar
-        x = max(10, sw - self.card_w - 40)
-        y = 60
+        # Margin from right edge is 24px, top is 44px below top bar
+        x = max(10, sw - self.card_w - 24)
+        y = 44
         self.move(x, y)
 
     def _on_timer(self):
         self.stats.update()
+        self._position_window()
         self.queue_draw()
         return True
 
     def _on_draw(self, widget, cr):
         w = self.card_w
         h = self.card_h
-        rad = 18
+        rad = 16
 
         # Check if composited
         is_composited = self.get_screen().is_composited()
@@ -201,15 +204,15 @@ class LunaraVitalsWindow(Gtk.Window):
 
         # 2. Header: 'System Vitals' + '• LIVE' Badge
         cr.select_font_face("DejaVu Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-        cr.set_font_size(14)
+        cr.set_font_size(13)
         cr.set_source_rgba(0.99, 0.95, 0.96, 0.95)
-        cr.move_to(22, 34)
+        cr.move_to(20, 32)
         cr.show_text("System Vitals")
 
         # '• LIVE' pill badge on right
-        badge_w, badge_h = 60, 20
-        badge_x, badge_y = w - badge_w - 22, 18
-        self._rounded_rect(cr, badge_x, badge_y, badge_w, badge_h, 10)
+        badge_w, badge_h = 56, 18
+        badge_x, badge_y = w - badge_w - 20, 18
+        self._rounded_rect(cr, badge_x, badge_y, badge_w, badge_h, 9)
         cr.set_source_rgba(0.84, 0.36, 0.55, 0.25)
         cr.fill_preserve()
         cr.set_source_rgba(0.84, 0.36, 0.55, 0.70)
@@ -217,24 +220,24 @@ class LunaraVitalsWindow(Gtk.Window):
         cr.stroke()
 
         # Dot + LIVE text
-        cr.arc(badge_x + 12, badge_y + 10, 3, 0, 2 * math.pi)
+        cr.arc(badge_x + 10, badge_y + 9, 3, 0, 2 * math.pi)
         cr.set_source_rgba(0.95, 0.40, 0.60, 1.0)
         cr.fill()
 
         cr.set_font_size(9)
         cr.set_source_rgba(0.95, 0.65, 0.75, 1.0)
-        cr.move_to(badge_x + 20, badge_y + 13)
+        cr.move_to(badge_x + 18, badge_y + 12)
         cr.show_text("LIVE")
 
         # 3. Row of 3 Circular Progress Gauges (CPU, RAM, Disk)
         gauge_specs = [
-            ("CPU", self.stats.cpu_pct, 65, 105),
-            ("RAM", self.stats.mem_pct, 170, 105),
-            ("Disk", self.stats.disk_pct, 275, 105),
+            ("CPU", self.stats.cpu_pct, 58, 98),
+            ("RAM", self.stats.mem_pct, 160, 98),
+            ("Disk", self.stats.disk_pct, 262, 98),
         ]
 
-        radius = 28
-        track_w = 4.5
+        radius = 26
+        track_w = 4.0
 
         for label, pct, cx, cy in gauge_specs:
             # Background track ring
@@ -265,14 +268,14 @@ class LunaraVitalsWindow(Gtk.Window):
             cr.set_font_size(10)
             cr.set_source_rgba(0.79, 0.54, 0.62, 0.95)
             lbl_ext = cr.text_extents(label)
-            cr.move_to(cx - lbl_ext.width / 2, cy + radius + 18)
+            cr.move_to(cx - lbl_ext.width / 2, cy + radius + 17)
             cr.show_text(label)
 
         # Subtle divider line
         cr.set_source_rgba(0.35, 0.22, 0.38, 0.45)
         cr.set_line_width(1.0)
-        cr.move_to(22, 168)
-        cr.line_to(w - 22, 168)
+        cr.move_to(20, 154)
+        cr.line_to(w - 20, 154)
         cr.stroke()
 
         # 4. Detailed Metrics List
@@ -284,22 +287,22 @@ class LunaraVitalsWindow(Gtk.Window):
             ("⚙", "Kernel", self.stats.kernel_version),
         ]
 
-        row_y = 194
-        spacing = 38
+        row_y = 182
+        spacing = 36
 
         for icon, title, val_str in details:
             # Icon
             cr.select_font_face("DejaVu Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-            cr.set_font_size(13)
+            cr.set_font_size(12)
             cr.set_source_rgba(0.84, 0.36, 0.55, 0.95)
-            cr.move_to(24, row_y)
+            cr.move_to(22, row_y)
             cr.show_text(icon)
 
             # Title
             cr.select_font_face("DejaVu Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_NORMAL)
             cr.set_font_size(11)
             cr.set_source_rgba(0.79, 0.54, 0.62, 0.95)
-            cr.move_to(48, row_y)
+            cr.move_to(44, row_y)
             cr.show_text(title)
 
             # Value (Right aligned)
@@ -307,7 +310,7 @@ class LunaraVitalsWindow(Gtk.Window):
             cr.set_font_size(10)
             cr.set_source_rgba(0.99, 0.95, 0.96, 0.95)
             ext = cr.text_extents(val_str)
-            cr.move_to(w - 24 - ext.width, row_y)
+            cr.move_to(w - 22 - ext.width, row_y)
             cr.show_text(val_str)
 
             row_y += spacing

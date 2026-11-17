@@ -123,15 +123,132 @@ def create_circular_orbit_wallpaper():
     return result.convert("RGB")
 
 
+def draw_vector_button(d, cx, cy, radius, icon_type, color=(253, 242, 246, 220)):
+    # Button circle background
+    d.ellipse((cx - radius, cy - radius, cx + radius, cy + radius), 
+              fill=(32, 22, 38, 220), outline=(214, 93, 140, 120), width=1)
+    
+    if icon_type == "wifi":
+        d.arc((cx - 14, cy - 10, cx + 14, cy + 18), 210, 330, fill=color, width=2)
+        d.arc((cx - 9, cy - 5, cx + 9, cy + 13), 210, 330, fill=color, width=2)
+        d.arc((cx - 5, cy - 1, cx + 5, cy + 9), 210, 330, fill=color, width=2)
+        d.ellipse((cx - 2, cy + 7, cx + 2, cy + 11), fill=color)
+    elif icon_type == "volume":
+        d.polygon([(cx - 10, cy - 4), (cx - 6, cy - 4), (cx, cy - 9), (cx, cy + 9), (cx - 6, cy + 4), (cx - 10, cy + 4)], fill=color)
+        d.arc((cx - 2, cy - 7, cx + 8, cy + 7), -45, 45, fill=color, width=2)
+        d.arc((cx - 2, cy - 11, cx + 12, cy + 11), -45, 45, fill=color, width=2)
+    elif icon_type == "brightness":
+        d.ellipse((cx - 5, cy - 5, cx + 5, cy + 5), fill=color)
+        for dx, dy in [(0, -10), (0, 10), (-10, 0), (10, 0), (-7, -7), (7, 7), (-7, 7), (7, -7)]:
+            d.line((cx + dx*0.6, cy + dy*0.6, cx + dx, cy + dy), fill=color, width=2)
+    elif icon_type == "keyboard":
+        d.rounded_rectangle((cx - 12, cy - 7, cx + 12, cy + 7), radius=2, outline=color, width=2)
+        d.line((cx - 8, cy - 2, cx - 4, cy - 2), fill=color, width=1)
+        d.line((cx - 2, cy - 2, cx + 2, cy - 2), fill=color, width=1)
+        d.line((cx + 4, cy - 2, cx + 8, cy - 2), fill=color, width=1)
+        d.line((cx - 6, cy + 3, cx + 6, cy + 3), fill=color, width=2)
+    elif icon_type == "a11y":
+        d.ellipse((cx - 3, cy - 11, cx + 3, cy - 5), fill=color)
+        d.line((cx, cy - 4, cx, cy + 5), fill=color, width=2)
+        d.line((cx - 9, cy - 1, cx + 9, cy - 1), fill=color, width=2)
+        d.line((cx, cy + 5, cx - 6, cy + 12), fill=color, width=2)
+        d.line((cx, cy + 5, cx + 6, cy + 12), fill=color, width=2)
+    elif icon_type == "power":
+        d.arc((cx - 9, cy - 8, cx + 9, cy + 10), 30, 150, fill=color, width=2)
+        d.arc((cx - 9, cy - 8, cx + 9, cy + 10), 190, 350, fill=color, width=2)
+        d.line((cx, cy - 10, cx, cy + 1), fill=color, width=2)
+
+
 def create_lock_screen(base_wp):
-    """Render the clean, high-definition lock-screen background.
-    Uses the exact same high-definition circular-orbit wallpaper as the desktop,
-    with subtle dark frosting so LightDM's interactive centered login card and
-    top panel render cleanly at any resolution without stretching, clipping, or cut-offs.
+    """Render the high-definition lock-screen background matching the Reference Design:
+    - Same circular-orbit wallpaper as desktop with subtle dark frosting.
+    - Top branding: LUNARA OS Celestial Ribbon Logo + Title + Tagline.
+    - Left floating panel: SYSTEM STATUS with live-feel progress bars.
+    - Right floating panel: QUICK INFO with connection/session status.
+    - Bottom row: circular quick action vector buttons + footnote.
+    - Center region is left clean and unobstructed for LightDM interactive PAM login card.
     """
     darken = Image.new("RGBA", (W, H), (14, 11, 18, 120))
     lock = Image.alpha_composite(base_wp.convert("RGBA"), darken)
-    return lock.convert("RGB")
+    overlay = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+    d = ImageDraw.Draw(overlay)
+
+    def centered(text, y, f, fill):
+        try:
+            bbox = d.textbbox((0, 0), text, font=f)
+            w = bbox[2] - bbox[0]
+        except AttributeError:
+            w = d.textlength(text, font=f)
+        d.text(((W - w) / 2, y), text, font=f, fill=fill)
+
+    # 1. LUNARA OS Celestial Ribbon Logo at top
+    logo_cx, logo_cy = W // 2, 78
+    for off in range(-12, 13, 3):
+        color = (214, 93, 140, max(40, 220 - abs(off) * 12))
+        d.arc((logo_cx - 28 + off, logo_cy - 12, logo_cx - 4 + off, logo_cy + 12), 120, 360, fill=color, width=2)
+        d.arc((logo_cx + 4 - off, logo_cy - 12, logo_cx + 28 - off, logo_cy + 12), 180, 60, fill=color, width=2)
+
+    # 2. LUNARA OS Title & Tagline below it
+    centered("LUNARA OS", 104, get_font(32, bold=True), (0xFD, 0xF2, 0xF6, 245))
+    centered("Your space. Your workflow.", 148, get_font(14), (0xF2, 0xA7, 0xBF, 215))
+
+    # 3. Left floating panel: SYSTEM STATUS
+    # Positioned at x: 80 to 390 (width 310), y: 370 to 640 (height 270)
+    card_l = (80, 370, 390, 640)
+    d.rounded_rectangle(card_l, radius=16, fill=(24, 18, 30, 210), outline=(214, 93, 140, 120), width=1)
+    d.text((105, 392), "SYSTEM STATUS", font=get_font(12, bold=True), fill=(214, 93, 140, 240))
+
+    metrics = [
+        ("CPU", "42%", 0.42),
+        ("RAM", "17%", 0.17),
+        ("Disk", "8%", 0.08),
+        ("Battery", "100%", 1.00),
+    ]
+    by = 430
+    for label, val_str, frac in metrics:
+        d.text((105, by), label, font=get_font(11), fill=(242, 167, 191, 230))
+        d.text((365, by), val_str, font=get_font(11, bold=True), fill=(253, 242, 246, 230), anchor="ra")
+        bar_y = by + 20
+        d.rounded_rectangle((105, bar_y, 365, bar_y + 6), radius=3, fill=(45, 30, 52, 220))
+        bar_w = int(260 * frac)
+        if bar_w > 0:
+            d.rounded_rectangle((105, bar_y, 105 + bar_w, bar_y + 6), radius=3, fill=(214, 93, 140, 240))
+        by += 44
+
+    # 4. Right floating panel: QUICK INFO
+    # Positioned at x: W - 390 to W - 80 (width 310), y: 370 to 640 (height 270)
+    card_r = (W - 390, 370, W - 80, 640)
+    d.rounded_rectangle(card_r, radius=16, fill=(24, 18, 30, 210), outline=(214, 93, 140, 120), width=1)
+    d.text((W - 365, 392), "QUICK INFO", font=get_font(12, bold=True), fill=(214, 93, 140, 240))
+
+    infos = [
+        ("Wi-Fi", "LUNARA-Net (Active)"),
+        ("Uptime", "Live Session (Booted)"),
+        ("Session", "XFCE / LUNARA Desktop"),
+        ("Security", "Protected & PAM Verified"),
+    ]
+    iy = 430
+    for title, val in infos:
+        d.text((W - 365, iy), title, font=get_font(11), fill=(242, 167, 191, 230))
+        d.text((W - 365, iy + 18), val, font=get_font(11, bold=True), fill=(253, 242, 246, 230))
+        iy += 44
+
+    # 5. Bottom quick action buttons row (Vector-drawn, sharp, centered)
+    btn_icons = ["wifi", "volume", "brightness", "keyboard", "a11y", "power"]
+    btn_radius = 21
+    btn_spacing = 58
+    total_w = len(btn_icons) * btn_spacing
+    start_bx = (W - total_w) // 2 + btn_spacing // 2
+    btn_cy = H - 85
+
+    for i, name in enumerate(btn_icons):
+        draw_vector_button(d, start_bx + i * btn_spacing, btn_cy, btn_radius, name)
+
+    # Clean credential footnote at bottom
+    centered("Live Session  •  Username: student  •  Password: microos", H - 42, get_font(12), (180, 160, 190, 180))
+
+    result = Image.alpha_composite(lock, overlay)
+    return result.convert("RGB")
 
 
 def create_avatar(out_path):

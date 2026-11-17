@@ -159,7 +159,7 @@ set color_normal=light-gray/black
 set color_highlight=white/magenta
 
 menuentry "LUNARA OS — Live Desktop (Rust Studio, Lab & Tasks)" {
-    linux /live/vmlinuz boot=live quiet console=ttyS0,115200 console=tty0
+    linux /live/vmlinuz boot=live quiet console=tty0
     initrd /live/initrd.img
 }
 
