@@ -134,7 +134,7 @@ class LunaraVitalsWindow(Gtk.Window):
         self.set_decorated(False)
         self.set_skip_taskbar_hint(True)
         self.set_skip_pager_hint(True)
-        self.set_type_hint(Gdk.WindowTypeHint.DESKTOP)
+        self.set_type_hint(Gdk.WindowTypeHint.NORMAL)
         self.set_keep_below(True)
         self.set_app_paintable(True)
 
@@ -169,23 +169,29 @@ class LunaraVitalsWindow(Gtk.Window):
         return True
 
     def _on_draw(self, widget, cr):
-        # Clear background to transparent
-        cr.set_operator(cairo.OPERATOR_SOURCE)
-        cr.set_source_rgba(0, 0, 0, 0)
-        cr.paint()
-        cr.set_operator(cairo.OPERATOR_OVER)
-
         w = self.card_w
         h = self.card_h
         rad = 18
 
-        # 1. Glass Card Background (Dark Plum #1A1220 at 86% opacity)
-        self._rounded_rect(cr, 1, 1, w - 2, h - 2, rad)
-        cr.set_source_rgba(0.10, 0.07, 0.13, 0.88)
-        cr.fill_preserve()
+        # Check if composited
+        is_composited = self.get_screen().is_composited()
+        if is_composited:
+            cr.set_operator(cairo.OPERATOR_SOURCE)
+            cr.set_source_rgba(0, 0, 0, 0)
+            cr.paint()
+            cr.set_operator(cairo.OPERATOR_OVER)
+            # Solid High-Definition Glass Card Background (Dark Plum #181120 at 96% opacity)
+            self._rounded_rect(cr, 1, 1, w - 2, h - 2, rad)
+            cr.set_source_rgba(0.09, 0.06, 0.12, 0.96)
+            cr.fill_preserve()
+        else:
+            # Fallback for non-composited environments
+            self._rounded_rect(cr, 1, 1, w - 2, h - 2, rad)
+            cr.set_source_rgb(0.09, 0.06, 0.12)
+            cr.fill_preserve()
 
-        # 1px Subtle Pink Border (#D65D8C at 45% opacity)
-        cr.set_source_rgba(0.84, 0.36, 0.55, 0.45)
+        # 1px Subtle Pink Border (#D65D8C at 50% opacity)
+        cr.set_source_rgba(0.84, 0.36, 0.55, 0.50)
         cr.set_line_width(1.0)
         cr.stroke()
 

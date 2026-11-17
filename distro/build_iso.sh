@@ -129,24 +129,27 @@ log "compressing root file system (squashfs, xz)"
 mksquashfs "$R" "$WORK/iso/live/filesystem.squashfs" -comp xz -e boot/efi -noappend -quiet
 
 log "generating Multiboot2 / GRUB configuration for 3-mode boot menu"
+mkdir -p "$WORK/iso/boot/grub" "$WORK/iso/efi/boot"
 cat > "$WORK/iso/boot/grub/grub.cfg" <<'EOF'
 # LUNARA OS — 3-Mode Boot Menu Configuration
 set timeout_style=menu
 set timeout=10
 set default=0
 
+# Start with console terminal active immediately so output is guaranteed on every hardware/VM
+terminal_input console
+terminal_output console
+
 # Load Unicode font to ensure graphical menu renders glyphs cleanly
 if [ -s /boot/grub/fonts/unicode.pf2 ]; then
     loadfont /boot/grub/fonts/unicode.pf2
 fi
 
+# Enable gfxterm using safe VESA modes natively supported by VirtualBox VESA BIOS
 insmod all_video
 insmod gfxterm
-set gfxmode=1920x1080x32,1600x900x32,1366x768x32,1280x720x32,1024x768x32,auto
+set gfxmode=1024x768,auto
 set gfxpayload=keep
-
-# Dual terminal output guarantees visibility across both VESA/GOP graphics and BIOS text console
-terminal_input console
 terminal_output gfxterm console
 
 # LUNARA Plum/Pink Color Scheme
@@ -160,7 +163,7 @@ menuentry "LUNARA OS — Live Desktop (Rust Studio, Lab & Tasks)" {
     initrd /live/initrd.img
 }
 
-menuentry "LUNARA Micro-OS — Rust Kernel (Bare-Metal x86-64, Instant Boot)" {
+menuentry "LUNARA Micro-OS — Rust Kernel (Bare-Metal x86-64)" {
     multiboot2 /boot/microos_x86.elf test=shell trace=0
     boot
 }
@@ -170,6 +173,9 @@ menuentry "LUNARA Micro-OS — Academic Verification Suite (TC1–TC6, 68 Checks
     boot
 }
 EOF
+
+# Copy grub.cfg to EFI boot path as well
+cp "$WORK/iso/boot/grub/grub.cfg" "$WORK/iso/efi/boot/grub.cfg"
 
 log "writing hybrid bootable ISO (BIOS + UEFI)"
 grub-mkrescue -o "$ISO" "$WORK/iso" -- -volid LUNARA_OS >/dev/null 2>&1

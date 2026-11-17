@@ -580,6 +580,11 @@ if [ -n "$out" ]; then
         xrandr --newmode "1366x768_60.00" 85.50 1366 1436 1579 1792 768 771 774 798 -hsync +vsync 2>/dev/null || true
         xrandr --addmode "$out" "1366x768_60.00" 2>/dev/null || true
     fi
+    # Add 1280x720 modeline if missing
+    if ! xrandr | grep -q "1280x720"; then
+        xrandr --newmode "1280x720_60.00" 74.50 1280 1344 1472 1664 720 723 728 748 -hsync +vsync 2>/dev/null || true
+        xrandr --addmode "$out" "1280x720_60.00" 2>/dev/null || true
+    fi
     # Auto-detect best resolution
     xrandr --auto 2>/dev/null || true
     best=$(xrandr | awk '/ connected/{f=1; next} f && /^[0-9]+/{f=0} f && /^ +[0-9]+x[0-9]+/{split($1,a,"x"); if (a[1]<=1920) {print $1; exit}}')
