@@ -266,7 +266,7 @@ cat > "$H/.config/conky/conky_clock.conf" <<'CONKY'
 conky.config = {
     alignment = 'top_middle',
     gap_x = 0,
-    gap_y = 415,
+    gap_y = 110,
     minimum_width = 460,
     maximum_width = 600,
     own_window = true,
@@ -282,15 +282,15 @@ conky.config = {
     draw_shades = false,
     draw_outline = false,
     draw_borders = false,
-    default_color = 'FDF2F6',
+    default_color = 'FFFFFF',
     color1 = 'C9899E',
     color2 = 'D65D8C',
     color3 = 'F2A7BF',
 };
 
 conky.text = [[
-${alignc}${font DejaVu Sans:size=56:weight=bold}${color}${time %H:%M}
-${voffset 2}${alignc}${font DejaVu Sans:size=14}${color1}${time %A, %d %B %Y}
+${alignc}${font DejaVu Sans:size=64:weight=bold}${color}${time %H:%M}
+${voffset 10}${alignc}${font DejaVu Sans:size=18}${color1}${time %d.%m.%Y}
 ]];
 CONKY
 
@@ -447,22 +447,47 @@ CONF
 
 # Desktop shortcuts in ~/Desktop (Matching Reference Collage Left Column!)
 log "populating desktop shortcuts matching reference collage"
-cat > "$H/Desktop/01-home.desktop" <<CONF
+cat > "$H/Desktop/01-terminal.desktop" <<CONF
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Home
-Exec=thunar /home/student
-Icon=user-home
+Name=Xfce Terminal
+Comment=Terminal Emulator
+Exec=xfce4-terminal
+Icon=utilities-terminal
 Terminal=false
-Categories=FileManager;
+Categories=System;TerminalEmulator;
 CONF
 
-cat > "$H/Desktop/02-studio.desktop" <<CONF
+cat > "$H/Desktop/02-files.desktop" <<CONF
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Rust Studio
+Name=Thunar File Manager
+Comment=Browse files and folders
+Exec=thunar
+Icon=system-file-manager
+Terminal=false
+Categories=System;FileManager;
+CONF
+
+cat > "$H/Desktop/03-tasks.desktop" <<CONF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Task Manager & System Monitor
+Comment=Monitor system resources and processes
+Exec=lunara-tasks
+Icon=utilities-system-monitor
+Terminal=false
+Categories=System;Monitor;
+CONF
+
+cat > "$H/Desktop/04-studio.desktop" <<CONF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Rust Development Studio
 Comment=LUNARA Rust Development Studio
 Exec=lunara-studio
 Icon=applications-development
@@ -470,7 +495,7 @@ Terminal=false
 Categories=Development;
 CONF
 
-cat > "$H/Desktop/03-lab.desktop" <<CONF
+cat > "$H/Desktop/05-lab.desktop" <<CONF
 [Desktop Entry]
 Version=1.0
 Type=Application
@@ -482,26 +507,16 @@ Terminal=false
 Categories=Science;
 CONF
 
-cat > "$H/Desktop/04-terminal.desktop" <<CONF
+cat > "$H/Desktop/06-browser.desktop" <<CONF
 [Desktop Entry]
 Version=1.0
 Type=Application
-Name=Terminal
-Exec=xfce4-terminal
-Icon=utilities-terminal
+Name=Web Browser
+Comment=Access the internet
+Exec=firefox-esr
+Icon=web-browser
 Terminal=false
-Categories=System;TerminalEmulator;
-CONF
-
-cat > "$H/Desktop/05-files.desktop" <<CONF
-[Desktop Entry]
-Version=1.0
-Type=Application
-Name=File Manager
-Exec=thunar
-Icon=system-file-manager
-Terminal=false
-Categories=System;FileManager;
+Categories=Network;WebBrowser;
 CONF
 
 chmod 0755 "$H/Desktop"/*.desktop 2>/dev/null || true

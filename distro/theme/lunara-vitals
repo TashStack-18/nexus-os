@@ -35,6 +35,10 @@ class SystemStats:
         self.tasks_total = 0
         self.tasks_running = 0
         self.uptime_str = "0m"
+        try:
+            self.kernel_version = platform.release()
+        except Exception:
+            self.kernel_version = "6.1.0-live"
         self.update()
 
     def update(self):
@@ -125,7 +129,7 @@ class LunaraVitalsWindow(Gtk.Window):
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
         self.stats = SystemStats()
         self.card_w = 340
-        self.card_h = 390
+        self.card_h = 430
 
         # Configure as borderless desktop overlay widget
         self.set_title("LUNARA System Vitals")
@@ -277,10 +281,11 @@ class LunaraVitalsWindow(Gtk.Window):
             ("💿", "Disk Space", f"{self.stats.disk_used_gb:.1f} GB / {self.stats.disk_total_gb:.1f} GB"),
             ("☰", "Tasks", f"{self.stats.tasks_total} ({self.stats.tasks_running} running)"),
             ("⏱", "Uptime", self.stats.uptime_str),
+            ("⚙", "Kernel", self.stats.kernel_version),
         ]
 
-        row_y = 198
-        spacing = 42
+        row_y = 194
+        spacing = 38
 
         for icon, title, val_str in details:
             # Icon
